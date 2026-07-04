@@ -105,6 +105,28 @@ pytest quant/tests -v
 
 The HMM tests auto-skip if `hmmlearn` isn't installed.
 
+## Bonus study: the S&P 500 "index effect" (`index_effect/`)
+
+A self-contained empirical test of whether index-inclusion front-running still
+pays a *small* trader (no market impact), or has been arbitraged away as the
+"common wisdom" holds. It parses S&P 500 additions (with real **announcement**
+vs **effective** dates) from Wikipedia, pulls daily prices from Nasdaq/Yahoo,
+and runs a market-adjusted event study.
+
+**Headline (2021–2026, 38 announcement-dated adds):** buying at the announcement
+close and selling into the rebalance earns **~+6.5% market-adjusted (t≈6, 79%
+win), positive every year** — the effect is *not* dead. But ~4.5% of it is an
+overnight gap at the public announcement (so it rewards *prediction*, not
+laziness); the clean public-info residual (next-open entry) is ~+1.9%, and the
+best small-only edge is shorting the post-rebalance reversal in **illiquid**
+additions (~+3.5%/20d). Full write-up and caveats: [`index_effect/FINDINGS.md`](index_effect/FINDINGS.md).
+
+```bash
+# reproduce (needs network the first time; then cached)
+PYTHONPATH=<repo parent> python -m quant.index_effect.report
+pytest tests/test_index_effect.py -v   # engine is unit-tested offline
+```
+
 ## Notes
 
 - **Walk-forward** rebuilds the states + matrix from scratch on every day using
