@@ -155,6 +155,38 @@ def test_parse_changes_discards_out_of_window_announcement():
     assert panw.announcement is None
 
 
+# Nasdaq/Dow layout: id="changes" table, one cell per line, ISO citation dates.
+NASDAQ_FIXTURE = """
+{| class="wikitable sortable" id="changes"
+! rowspan="2" |Date
+! colspan="2" |Added
+! colspan="2" |Removed
+! rowspan="2" |Reason
+|-
+!Ticker
+!Security
+!Ticker
+!Security
+|-
+|June 24, 2024
+|ALAB
+|[[Astera Labs]]
+|WBA
+|[[Walgreens]]
+|Quarterly reconstitution.<ref>{{Cite web |date=2024-06-07 |title=x |url=http://x}}</ref>
+|}
+"""
+
+
+def test_parse_changes_handles_line_per_cell_and_iso_dates():
+    events = parse_changes(NASDAQ_FIXTURE)
+    assert len(events) == 1
+    e = events[0]
+    assert e.ticker == "ALAB"
+    assert e.effective == dt.date(2024, 6, 24)
+    assert e.announcement == dt.date(2024, 6, 7)  # ISO date in citation
+
+
 def _ohlc(rows, start="2024-01-02"):
     idx = pd.date_range(start, periods=len(rows), freq="B")
     return pd.DataFrame(rows, index=idx, columns=["open", "close"])

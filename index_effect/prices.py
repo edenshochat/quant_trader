@@ -57,8 +57,13 @@ def load_nasdaq(
     assetclass: str = "stocks",
     cache_dir: str = DEFAULT_CACHE,
     tries: int = 4,
+    fallback: bool = True,
 ) -> pd.DataFrame | None:
-    """Load daily OHLCV from Nasdaq. Returns ``None`` if unavailable/delisted."""
+    """Load daily OHLCV from Nasdaq. Returns ``None`` if unavailable/delisted.
+
+    ``fallback=False`` skips the stocks→etf retry (faster when scanning many
+    tickers of which some are simply delisted).
+    """
     os.makedirs(cache_dir, exist_ok=True)
     fp = os.path.join(cache_dir, f"nasdaq_{ticker}_{assetclass}.json".replace("/", "_"))
     if os.path.exists(fp):
@@ -78,9 +83,9 @@ def load_nasdaq(
         table = data.get("tradesTable") or {}
         rows = table.get("rows")
         if not rows:
-            if assetclass == "stocks" and i == 0:
+            if fallback and assetclass == "stocks" and i == 0:
                 return load_nasdaq(ticker, start, end, "etf", cache_dir, tries=2)
-            time.sleep(1.5 * (i + 1))
+            time.sleep(0.5 * (i + 1))
             continue
         parsed = []
         for r in rows:

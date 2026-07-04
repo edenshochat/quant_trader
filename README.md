@@ -127,8 +127,15 @@ A concrete **$100k pocket** (buy `OPEN[AD+1]`, sell `CLOSE[ED-1]`, no leverage,
 no slippage), 2020→2026, grows to ~$243k all-in (+143%, CAGR 15.4%), but its
 **max drawdown is −17.8%** — a late-2024/25 *cluster* of weak trades with a
 >1-year recovery — and that drawdown scales ~linearly with position size (−9% at
-half, −5% at quarter). Full write-up and caveats:
-[`index_effect/FINDINGS.md`](index_effect/FINDINGS.md).
+half, −5% at quarter).
+
+**Cross-index:** the same logic run on every scheduled-reconstitution index with
+a dated change log (`cross_index.py`) confirms the announcement→rebalance edge is
+significant in all four families — S&P 500 **+6.1% (t=5.8)**, S&P 600 +3.5%
+(t=4.2), S&P 400 +3.1% (t=2.7), Nasdaq-100 +2.6% (t=2.9) — and is *largest in the
+S&P 500*, i.e. it scales with indexed AUM, not with how small-cap the add is.
+
+Full write-up and caveats: [`index_effect/FINDINGS.md`](index_effect/FINDINGS.md).
 
 ```bash
 # reproduce (needs network the first time; then cached)

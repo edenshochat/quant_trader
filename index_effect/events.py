@@ -21,8 +21,22 @@ from dataclasses import dataclass
 
 WIKI_API = (
     "https://en.wikipedia.org/w/api.php?action=parse"
-    "&page=List_of_S%26P_500_companies&prop=wikitext&format=json&formatversion=2"
+    "&page={page}&prop=wikitext&format=json&formatversion=2"
 )
+
+# Wikipedia articles whose constituent-change tables share the S&P/Nasdaq
+# ``id="changes"`` format (Date | Added ticker/security | Removed … | Reason),
+# mapped to the ETF that tracks the index. These are the indices with a
+# predictable, scheduled reconstitution *and* a publicly dated change log.
+# (The Dow is deliberately excluded: it is committee-selected and changes only a
+# handful of times a decade — not a scheduled, rules-based reconstitution, so it
+# doesn't fit the "predictable rebalancing" premise.)
+INDEX_PAGES = {
+    "S&P 500": ("List of S&P 500 companies", "SPY"),
+    "S&P 400 MidCap": ("List of S&P 400 companies", "MDY"),
+    "S&P 600 SmallCap": ("List of S&P 600 companies", "IJR"),
+    "Nasdaq-100": ("Nasdaq-100", "QQQ"),
+}
 
 _TICKER_RE = re.compile(r"^[A-Z][A-Z.\-]{0,5}$")
 _DATE_FMTS = ("%B %d, %Y", "%B %d %Y", "%Y-%m-%d")
@@ -74,25 +88,34 @@ def parse_changes(wikitext: str) -> list[AdditionEvent]:
     announcement date, when present, is read from the first ``date=`` field of
     the row's citation.
     """
-    lower = wikitext.lower()
-    start = lower.find("selected changes")
-    if start == -1:
+    # Prefer the canonical id="changes" table (S&P 500/400/600, Nasdaq-100, Dow);
+    # fall back to a "selected changes" heading for older/other layouts.
+    pos = wikitext.find('id="changes"')
+    if pos != -1:
+        t_start = wikitext.rfind("{|", 0, pos)
+    else:
+        start = wikitext.lower().find("selected changes")
+        if start == -1:
+            return []
+        t_start = wikitext.find("{|", start)
+    if t_start == -1:
         return []
-    section = wikitext[start:]
-    t_start = section.find("{|")
-    t_end = section.find("\n|}", t_start)
-    if t_start == -1 or t_end == -1:
+    t_end = wikitext.find("\n|}", t_start)
+    if t_end == -1:
         return []
-    table = section[t_start:t_end]
+    table = wikitext[t_start:t_end]
 
     events: list[AdditionEvent] = []
     for chunk in table.split("\n|-")[1:]:
-        line = chunk.strip()
-        if line.startswith("!"):  # header row
-            continue
-        if line.startswith("|"):
-            line = line[1:]
-        cells = line.split("||")
+        # Cells may be inline (``a || b || c``) or one-per-line (``\n|a\n|b``);
+        # handle both so the parser works across S&P and Nasdaq/Dow layouts.
+        cells: list[str] = []
+        for ln in chunk.split("\n"):
+            s = ln.strip()
+            if not s or s.startswith("!"):  # blank or header cell
+                continue
+            if s.startswith("|"):
+                cells.extend(s[1:].split("||"))
         if len(cells) < 5:
             continue
         effective = _parse_date(_strip_markup(cells[0]))
@@ -102,7 +125,7 @@ def parse_changes(wikitext: str) -> list[AdditionEvent]:
         reason = _strip_markup(cells[5]) if len(cells) > 5 else ""
         m = re.search(
             r"\|\s*date\s*=\s*([A-Z][a-z]+ \d{1,2},? \d{4})", chunk
-        )
+        ) or re.search(r"\|\s*date\s*=\s*(\d{4}-\d{2}-\d{2})", chunk)
         announcement = _parse_date(m.group(1)) if m else None
         # Guard against citations that reference the *effective* announcement of a
         # later, unrelated change: only trust an announcement strictly before ED
@@ -121,11 +144,14 @@ def parse_changes(wikitext: str) -> list[AdditionEvent]:
     return events
 
 
-def fetch_wikitext(cache_path: str | None = None) -> str:
-    """Fetch the article wikitext via the MediaWiki API (cached to disk if given)."""
+def fetch_wikitext(
+    page: str = "List of S&P 500 companies", cache_path: str | None = None
+) -> str:
+    """Fetch an article's wikitext via the MediaWiki API (cached to disk if given)."""
     import json
     import os
     import subprocess
+    import urllib.parse
 
     if cache_path and os.path.exists(cache_path):
         return json.load(open(cache_path))["parse"]["wikitext"]
@@ -135,7 +161,7 @@ def fetch_wikitext(cache_path: str | None = None) -> str:
     args = ["curl", "-sS", "-H", f"User-Agent: {ua}"]
     if os.path.exists(ca):
         args += ["--cacert", ca]
-    args.append(WIKI_API)
+    args.append(WIKI_API.format(page=urllib.parse.quote(page)))
     out = subprocess.run(args, capture_output=True, text=True, timeout=60).stdout
     if cache_path:
         with open(cache_path, "w") as fh:
@@ -143,6 +169,8 @@ def fetch_wikitext(cache_path: str | None = None) -> str:
     return json.loads(out)["parse"]["wikitext"]
 
 
-def load_events(cache_path: str | None = None) -> list[AdditionEvent]:
-    """Convenience: fetch + parse the current S&P 500 change table."""
-    return parse_changes(fetch_wikitext(cache_path))
+def load_events(
+    page: str = "List of S&P 500 companies", cache_path: str | None = None
+) -> list[AdditionEvent]:
+    """Fetch + parse an index's constituent-change table into addition events."""
+    return parse_changes(fetch_wikitext(page, cache_path))

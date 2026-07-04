@@ -8,7 +8,8 @@ NOT financial advice — an educational research reproduction.
 
 from __future__ import annotations
 
-from .events import AdditionEvent, load_events, parse_changes
+from .cross_index import run_index
+from .events import INDEX_PAGES, AdditionEvent, load_events, parse_changes
 from .portfolio import (
     Trade,
     build_trade,
@@ -30,6 +31,8 @@ from .study import (
 
 __all__ = [
     "AdditionEvent",
+    "INDEX_PAGES",
+    "run_index",
     "load_events",
     "parse_changes",
     "EventResult",

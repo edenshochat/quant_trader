@@ -195,6 +195,39 @@ confirming the drawdown is a late-2024/25 event, not a data-window artifact.
 > profile (~−18% all-in, linear in size, >1yr recovery) as the durable
 > takeaway.**
 
+## Does it generalise? Cross-index validation
+
+Same logic, every index with a **scheduled, rules-based reconstitution and a
+publicly dated change log** (`cross_index.py`). Each index's additions are
+benchmarked against **its own tracking ETF**, modern (~2021→now) sample:
+
+| Index (ETF) | n | run-up `ED-6→ED-1` | **buy `C[AD]→ED-1`** | n(AD) |
+|---|---:|---:|---:|---:|
+| **S&P 500 (SPY)** | 72 | +3.49% (t=3.9) | **+6.13% (t=5.8)** | 41 |
+| S&P 600 SmallCap (IJR) | 88 | +0.96% (t=1.8) | **+3.49% (t=4.2)** | 37 |
+| S&P 400 MidCap (MDY) | 87 | +1.09% (t=1.7) | **+3.09% (t=2.7)** | 46 |
+| Nasdaq-100 (QQQ) | 43 | +1.24% (t=1.3) | **+2.60% (t=2.9)** | 12 |
+
+**The announcement→rebalance edge is positive and statistically significant in
+all four index families** — the effect is not an S&P 500 quirk.
+
+The most important cross-sectional result: **the edge is ~2× larger in the S&P
+500 than anywhere else** (+6.1% vs +2.6–3.5%). It scales with the *dollars of
+indexed AUM forced to buy*, not with how small-cap the added stock is —
+SPY/IVV/VOO track >$10T; MDY/IJR/QQQ track a small fraction of that, so their
+reconstitution demand moves price less. (This also refutes the naive "smaller
+index = bigger effect" guess: S&P 600 small-caps show a *smaller* pop than S&P
+500 large-caps, because the tracking money is smaller.)
+
+**Scope honesty:** this validates 4 index *families*, not 20 independent ETFs.
+Truly independent, predictably-rebalancing indices with a **publicly accessible,
+dated add/remove history** are scarce: the S&P family and Nasdaq-100 publish them
+(scraped from Wikipedia here); Russell/MSCI/FTSE/DAX/Nikkei and factor/smart-beta
+ETFs (MTUM, VLUE, USMV, …) reconstitute predictably too, but their historical
+constituent-change dates aren't reachable from a free source in this
+environment — validating those would need an index-provider or holdings-snapshot
+feed. The Dow is committee-selected (not scheduled) and is excluded on principle.
+
 ## Caveats
 
 * Modern sample only (Nasdaq ≈5y); the pre-2021 decay comparison needs the Yahoo
