@@ -228,6 +228,31 @@ constituent-change dates aren't reachable from a free source in this
 environment — validating those would need an index-provider or holdings-snapshot
 feed. The Dow is committee-selected (not scheduled) and is excluded on principle.
 
+## Timeline: run-up by index × rebalance quarter (2020–2026)
+
+Every switch event (791 additions across the four indices, 2020Q1–2026Q3) placed
+on a grid of index × calendar quarter, cell = mean run-up `C[ED-6]→C[ED-1]`:
+
+| Index (ETF) | n | mean run-up (raw) | mean run-up (vs own ETF) | win% |
+|---|---:|---:|---:|---:|
+| S&P 600 SmallCap (IJR) | 384 | **+4.5%** | **+4.4%** | 69% |
+| Nasdaq-100 (QQQ) | 63 | +3.4% | +2.6% | 70% |
+| S&P 500 (SPY) | 104 | +2.4% | +2.5% | 55% |
+| S&P 400 MidCap (MDY) | 240 | +0.5% | +0.6% | 50% |
+
+Over the **full 2020–2026 span**, the 5-day run-up into the rebalance is *largest
+for S&P 600 small-caps* (+4.4% market-adjusted, 69% win) — the low-liquidity
+effect the original chat intuited: small, less-liquid additions move most on the
+forced buying. S&P 400 mid-caps are weakest (~0), plausibly because many mid-cap
+"additions" are demotions from the S&P 500 or promotions from the 600 — the stock
+was already indexed, so the flows partly offset rather than being fresh demand.
+
+(Note this differs from the announcement-capture cross-section, where the S&P 500
+led; there the edge scales with indexed AUM, here with the added name's
+illiquidity. Different windows surface different halves of the same mechanism.
+The 2020–21 small-cap raw figures also carry post-COVID beta — the market-adjusted
+column strips that and the ranking holds.)
+
 ## Caveats
 
 * Modern sample only (Nasdaq ≈5y); the pre-2021 decay comparison needs the Yahoo

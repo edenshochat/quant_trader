@@ -55,6 +55,7 @@ class AdditionEvent:
     effective: dt.date
     announcement: dt.date | None = None
     reason: str = ""
+    removed: str = ""  # the ticker this addition replaced (the other half of the switch)
 
     @property
     def lag_calendar_days(self) -> int | None:
@@ -122,6 +123,9 @@ def parse_changes(wikitext: str) -> list[AdditionEvent]:
         added = _strip_markup(cells[1])
         if effective is None or not _TICKER_RE.match(added):
             continue
+        removed = _strip_markup(cells[3]) if len(cells) > 3 else ""
+        if not _TICKER_RE.match(removed):
+            removed = ""
         reason = _strip_markup(cells[5]) if len(cells) > 5 else ""
         m = re.search(
             r"\|\s*date\s*=\s*([A-Z][a-z]+ \d{1,2},? \d{4})", chunk
@@ -138,6 +142,7 @@ def parse_changes(wikitext: str) -> list[AdditionEvent]:
                 effective=effective,
                 announcement=announcement,
                 reason=reason.split("<ref")[0].strip(),
+                removed=removed,
             )
         )
     events.sort(key=lambda e: e.effective)

@@ -146,6 +146,13 @@ def test_parse_changes_extracts_additions_and_announcement():
     assert panw.effective == dt.date(2023, 6, 20)
     assert panw.announcement == dt.date(2023, 6, 2)
     assert panw.lag_calendar_days == 18
+    assert panw.removed == ""  # this fixture row has no removed ticker
+
+
+def test_parse_changes_captures_removed_ticker():
+    wt = NASDAQ_FIXTURE  # ALAB added, WBA removed
+    e = parse_changes(wt)[0]
+    assert e.ticker == "ALAB" and e.removed == "WBA"
 
 
 def test_parse_changes_discards_out_of_window_announcement():
