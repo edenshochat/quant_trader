@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from quant.index_effect.europe import extract_additions, parse_change_blocks
 from quant.index_effect.events import parse_changes
 from quant.index_effect.multi_index import (
     dsr_weights,
@@ -423,3 +424,76 @@ def test_sleeve_correlation_uncorrelated_sleeves():
     b = [("d0", 100.0), ("d1", 99.0), ("d2", 108.9), ("d3", 98.0)]
     corr = sleeve_correlation({"a": a, "b": b})
     assert -1.0 <= corr["a / b"] <= 1.0
+
+
+# ---- europe.py: STOXX historical-compositions PDF-text parser ----
+
+STOXX_TEXT_SIMPLE = """
+ HISTORICAL INDEX COMPOSITIONS OF EQUITY AND STRATEGY INDICES
+
+
+4/60
+Date of
+change
+Date of
+announcement Deletion Addition
+23.07.2001 26.06.2001 Dresdner Bank MLP
+24.09.2018 05.09.2018 Commerzbank AG Wirecard AG
+"""
+
+STOXX_TEXT_MULTI_ADD = """
+20.09.2021 03.09.2021 -
+Airbus SE
+Brenntag SE
+HelloFresh SE
+"""
+
+STOXX_TEXT_AMBIGUOUS = """
+24.06.2024 18.06.2024 MorphoSys Elmos Semiconductor
+23.12.2024 04.12.2024 Energiekontor
+SMA Solar Technology
+"""
+
+
+def test_parse_change_blocks_basic():
+    blocks = parse_change_blocks(STOXX_TEXT_SIMPLE, min_year=2015)
+    # the 2001 row is filtered out by min_year; only 2018 survives
+    assert len(blocks) == 1
+    eff, ann, pairs = blocks[0]
+    assert eff == dt.date(2018, 9, 24)
+    assert ann == dt.date(2018, 9, 5)
+    assert pairs == ["Commerzbank AG Wirecard AG"]
+
+
+def test_parse_change_blocks_multiline_pure_addition():
+    blocks = parse_change_blocks(STOXX_TEXT_MULTI_ADD, min_year=2015)
+    assert len(blocks) == 1
+    eff, ann, pairs = blocks[0]
+    assert eff == dt.date(2021, 9, 20)
+    assert pairs == ["-", "Airbus SE", "Brenntag SE", "HelloFresh SE"]
+
+
+def test_extract_additions_resolves_simple_swap():
+    names = {"Commerzbank AG": "CBK.DE", "Wirecard AG": "WDI.HM"}
+    additions, dropped = extract_additions(STOXX_TEXT_SIMPLE, min_year=2015, name_to_ticker=names)
+    assert additions == [(dt.date(2018, 9, 24), dt.date(2018, 9, 5), "WDI.HM")]
+    assert dropped == []
+
+
+def test_extract_additions_resolves_pure_addition_block():
+    names = {"Airbus SE": "AIR.DE", "Brenntag SE": "BNR.DE", "HelloFresh SE": "HFG.DE"}
+    additions, dropped = extract_additions(STOXX_TEXT_MULTI_ADD, min_year=2015, name_to_ticker=names)
+    tickers = {t for _, _, t in additions}
+    assert tickers == {"AIR.DE", "BNR.DE", "HFG.DE"}
+    assert all(eff == dt.date(2021, 9, 20) for eff, _, _ in additions)
+    assert dropped == []
+
+
+def test_extract_additions_drops_ambiguous_blocks_instead_of_guessing():
+    # only Elmos Semiconductor is a known name in the dict; MorphoSys, Energiekontor
+    # and SMA Solar Technology are deliberately left out to exercise the drop path.
+    names = {"Elmos Semiconductor": "ELG.DE"}
+    additions, dropped = extract_additions(STOXX_TEXT_AMBIGUOUS, min_year=2015, name_to_ticker=names)
+    assert additions == []  # 1-known-name lines can't be resolved to a addition/deletion pair
+    assert len(dropped) == 3
+    assert all(reason for *_, reason in dropped)

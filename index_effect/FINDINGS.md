@@ -352,6 +352,69 @@ execution to realize it, and (b) using a risk/significance measure (DSR) to
 decide *how much* capital each sleeve deserves, which the earlier all-in,
 one-position analyses had no mechanism to express.
 
+## Does Europe have the same effect? (`europe.py`, `europe_report.py`)
+
+**Wikipedia doesn't work for Europe.** Checked FTSE 100, DAX, CAC 40, IBEX 35,
+FTSE MIB, AEX, SMI, EURO STOXX 50, and OMX Stockholm 30: none have a
+structured, dated constituent-change table like the S&P family's — only
+narrative "History" prose, and no dedicated "List of X constituents" article
+exists for any of them. Same problem that got the Dow excluded from the
+cross-index study, but for a different reason (data availability, not
+committee-selection).
+
+**STOXX itself publishes one, though**: an official "Historical Index
+Compositions" PDF covering DAX, TecDAX, MDAX, and SDAX back to 1987/2003, in
+the same (date of change, date of announcement, deletion, addition) shape as
+the Wikipedia tables — found via web search, not obvious from STOXX's
+JS-rendered site (which blocks headless-browser access). This module parses
+its **DAX and TecDAX** sections only; MDAX/SDAX's much larger, more obscure
+small/mid-cap universe wasn't worth the manual ticker-verification effort this
+round. A handful of table rows where PDF text extraction lost the column
+structure (which name was added vs. removed) are dropped rather than guessed,
+as are 3 companies (ISRA VISION, Varta, SUSE S.A.) taken private or into
+insolvency with no surviving Yahoo history — see `europe.py`'s module
+docstring for the full accounting.
+
+**Result: DAX shows the *opposite* of the US effect.** Announcement→rebalance,
+market-adjusted vs. each index's own benchmark (^GDAXI / ^TECDAX):
+
+| Index | n | mean | t | win% | DSR |
+|---|---:|---:|---:|---:|---:|
+| **DAX** | 27 | **−3.50%** | **−4.22** | **22%** | 0.00 |
+| TecDAX | 26 | +1.51% | +1.78 | 65% | 0.02 |
+
+**DAX additions tend to *fall*, hard, between announcement and rebalance** —
+significant, and broad-based (21 of 27 events negative, not a couple of
+outliers), including ordinary additions (MTU Aero Engines −10.0%, Covestro
+−9.8%, Hannover Re −11.5%, GEA Group −5.2%) as well as recent spinoffs/IPOs
+(Siemens Energy −13.0% and −4.2% on two separate occasions, Porsche AG −7.6%).
+The `$100k` all-in pocket for DAX **loses 59% of capital** (max DD −58%) over
+this sample. TecDAX is directionally like the US (positive), but weak and
+statistically insignificant (DSR≈0.02) on a sample this size.
+
+**Tested and rejected:** pre-announcement front-running ("buy the rumor, sell
+the news" — plausible since DAX's reconstitution is free-float-market-cap
+rules-based and thus more *predictable* than the S&P's discretionary
+committee). `CAR[AD-10→AD-1]` = −0.32% (t=−0.31, n.s.) — no significant
+pre-announcement drift, so the negative reaction isn't explained by smart money
+front-running the announcement and then selling into it.
+
+**Unconfirmed hypotheses** (flagged as such, not concluded): the sample is
+small (27 events over 2018–2025) and concentrated in a period when several
+DAX additions were recent spinoffs/IPOs (Siemens Energy, Daimler Truck,
+Porsche) subject to unrelated post-spinoff share overhang, and/or names that
+were richly priced 2020–21 growth/COVID darlings (HelloFresh, Delivery Hero,
+Zalando, Sartorius) heading into the 2022 growth-stock unwind — either could
+inject a directional bias unrelated to the inclusion mechanism itself that a
+sample of this size can't fully average out. This needs a larger sample (MDAX/
+SDAX, or extending further back) before treating "DAX inclusion is a *sell*
+signal" as a confirmed, tradeable finding rather than a striking but
+preliminary one.
+
+```bash
+PYTHONPATH=<repo parent> python -m quant.index_effect.europe_report
+```
+
 ## Caveats
 
 * Modern sample only (Nasdaq ≈5y); the pre-2021 decay comparison needs the Yahoo

@@ -146,6 +146,17 @@ numbers; weighting sleeves by their own Deflated Sharpe Ratio beats naive
 equal-weight pooling — $190k (+90%) at only −11.3% max DD, beating the S&P-500-
 only baseline on both return and drawdown.
 
+**Europe (`europe.py`):** no major European index has a Wikipedia-parseable
+change log — but STOXX itself publishes an official "Historical Index
+Compositions" PDF for DAX/TecDAX/MDAX/SDAX. Running the same study on
+DAX/TecDAX turns up a genuinely surprising, opposite-sign result: **DAX
+additions tend to *fall* significantly into the rebalance** (mean −3.50%,
+t=−4.22, only 22% win — a $100k all-in DAX pocket *loses* 59%), while TecDAX is
+weakly positive like the US but not significant on this sample size (n=26-27).
+Pre-announcement front-running was tested as an explanation and rejected
+(no significant pre-drift) — see `FINDINGS.md` for the honest, unconfirmed
+hypotheses about why.
+
 Full write-up and caveats: [`index_effect/FINDINGS.md`](index_effect/FINDINGS.md).
 
 ```bash
