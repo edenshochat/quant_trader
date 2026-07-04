@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 
 from quant.index_effect.events import parse_changes
+from quant.index_effect.significance import assess, per_trade_sharpe
 from quant.index_effect.study import (
     align,
     car,
@@ -145,3 +146,21 @@ def test_parse_changes_discards_out_of_window_announcement():
     wt = WIKITEXT_FIXTURE.replace("June 2, 2023", "January 2, 2023")
     panw = {e.ticker: e for e in parse_changes(wt)}["PANW"]
     assert panw.announcement is None
+
+
+def test_per_trade_sharpe():
+    assert per_trade_sharpe([0.01, 0.01, 0.01]) == 0.0  # zero variance -> guarded to 0
+    assert per_trade_sharpe([]) == 0.0
+    # positive mean with spread -> positive finite Sharpe
+    s = per_trade_sharpe([0.05, -0.01, 0.03, 0.02])
+    assert s > 0 and s < 10
+
+
+def test_assess_ranks_clean_edge_above_noise():
+    # a consistently positive edge should earn higher PSR/DSR than a noisy one
+    strong = [0.04, 0.05, 0.03, 0.06, 0.04, 0.05, 0.03, 0.05]
+    weak = [0.05, -0.06, 0.07, -0.04, 0.06, -0.05, 0.04, -0.03]
+    out = assess({"strong": strong, "weak": weak}, n_trials=10)
+    assert out["strong"]["psr"] > out["weak"]["psr"]
+    assert out["strong"]["dsr"] > out["weak"]["dsr"]
+    assert 0.0 <= out["strong"]["dsr"] <= 1.0

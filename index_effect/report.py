@@ -16,6 +16,7 @@ import pandas as pd
 
 from .events import load_events
 from .prices import load_nasdaq
+from .significance import assess
 from .study import (
     align,
     car,
@@ -77,6 +78,7 @@ def print_report(results: list) -> None:
           f"(with announcement date: {len(ad)})")
 
     print("\n===== ANNOUNCEMENT -> REBALANCE (the classic index-effect window) =====")
+    print(_row("Pre-ann drift C[AD-10]->C[AD-1]", summarize(col("ann_pre_drift", ad))))
     print(_row("Announcement day C[AD-1]->C[AD]", summarize(col("ann_day", ad))))
     print(_row("Buy C[AD] -> C[ED-1] (rebalance)", summarize(col("buy_ADclose_ED1", ad))))
     print(_row("Buy C[AD] -> C[ED]", summarize(col("buy_ADclose_ED", ad))))
@@ -101,7 +103,8 @@ def print_report(results: list) -> None:
     print(_row("trim 3 each tail", summarize(xs[3:-3])))
 
     print("\n===== LIQUIDITY SPLIT (short the post-rebalance reversal) =====")
-    for name, bucket in liquidity_terciles(results):
+    terciles = liquidity_terciles(results)
+    for name, bucket in terciles:
         if not bucket:
             continue
         lo, hi = bucket[0].dollar_volume / 1e6, bucket[-1].dollar_volume / 1e6
@@ -109,6 +112,21 @@ def print_report(results: list) -> None:
         short = -s["mean"] * 100 if s else float("nan")
         print(f"  {name:9} (${lo:6.0f}M..${hi:7.0f}M/day)  "
               f"reversal long={s['mean']*100:+6.2f}% => SHORT P&L={short:+6.2f}%  t={s['t']:+5.2f}  n={s['n']}")
+
+    print("\n===== MULTIPLE-TESTING-AWARE SIGNIFICANCE (repo PSR / DSR) =====")
+    low_tercile = terciles[0][1]
+    strategies = {
+        "LONG public-info O[AD+1]->ED-1": [r.cars.get("buy_open1_ED1") for r in ad],
+        "LONG prompt C[AD]->ED-1": [r.cars.get("buy_ADclose_ED1") for r in ad],
+        "SHORT illiquid reversal ED-1->+20": [
+            -r.cars["reversal_ED1_ED20"] for r in low_tercile
+        ],
+    }
+    assessed = assess(strategies)
+    for name, a in assessed.items():
+        print(f"  {name:34} n={a['n']:3}  Sharpe/trade={a['sharpe']:+.2f}  "
+              f"PSR={a['psr']:.3f}  DSR={a['dsr']:.3f}")
+    print("  (DSR>0.95 => the edge survives correction for the windows examined)")
 
 
 def main() -> None:

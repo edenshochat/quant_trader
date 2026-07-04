@@ -115,11 +115,14 @@ and runs a market-adjusted event study.
 
 **Headline (2021–2026, 38 announcement-dated adds):** buying at the announcement
 close and selling into the rebalance earns **~+6.5% market-adjusted (t≈6, 79%
-win), positive every year** — the effect is *not* dead. But ~4.5% of it is an
-overnight gap at the public announcement (so it rewards *prediction*, not
-laziness); the clean public-info residual (next-open entry) is ~+1.9%, and the
-best small-only edge is shorting the post-rebalance reversal in **illiquid**
-additions (~+3.5%/20d). Full write-up and caveats: [`index_effect/FINDINGS.md`](index_effect/FINDINGS.md).
+win), positive every year** and survives the repo's own Deflated-Sharpe
+multiple-testing guardrail (DSR≈1.0) — the effect is *not* dead. But ~4.5% of it
+is an overnight gap at the (surprise — no pre-announcement drift) public
+announcement, so it rewards *prediction* / prompt execution, not laziness. The
+residuals a lazy small trader could get on public info alone — the next-open long
+(~+1.9%) and shorting the post-rebalance reversal in **illiquid** additions
+(~+3.5%/20d) — are nominally positive but *fail* deflation (DSR≈0.4). Full
+write-up and caveats: [`index_effect/FINDINGS.md`](index_effect/FINDINGS.md).
 
 ```bash
 # reproduce (needs network the first time; then cached)

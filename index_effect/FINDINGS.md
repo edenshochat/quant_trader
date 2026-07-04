@@ -75,6 +75,20 @@ The naive "the ETF buys from me at a ridiculous price" mental model is wrong
 about *mechanism* (the pop is at announcement, not a lazy sell into the
 rebalance) but right that **a mechanical, exploitable edge exists.**
 
+## Is the addition anticipated? (pre-announcement drift)
+
+Abnormal return in the 10 trading days *before* the announcement:
+
+| Window                         |  n |   mean | median | t-stat | win% |
+|--------------------------------|---:|-------:|-------:|-------:|-----:|
+| `C[AD-10] → C[AD-1]` (pre-news)| 38 | +0.98% | +0.29% |  +0.79 |  53% |
+
+**Not significant.** The addition is genuinely a *surprise* — there is no
+tradable pre-announcement momentum/leakage drift; the ~4.5% jump is repricing
+*at* the announcement, not gradual anticipation. Implication: the prediction
+game must be **fundamental** (forecasting which eligible name the committee
+picks), not a matter of riding price momentum into the event.
+
 ## The low-volume angle — a cleaner *short* edge
 
 The user's instinct ("works at lower volume, no big money movements") shows up on
@@ -93,15 +107,36 @@ PLTR, SMCI…) momentum dominates and there is no reversal. This is a
 **capacity-limited, small-size** edge — big arbs can't work it without moving the
 stock, which is exactly why a residual survives.
 
+## How much survives multiple-testing correction?
+
+Several windows were examined, so a lone t-stat flatters. Running each strategy's
+per-trade returns through the repo's own guardrails — Probabilistic Sharpe (PSR,
+P[true Sharpe>0]) and **Deflated Sharpe (DSR**, PSR against the expected best-of-N
+noise Sharpe) from `quant.metrics`:
+
+| Strategy (per-trade)              |  n | Sharpe | PSR   | **DSR** | survives? |
+|-----------------------------------|---:|-------:|------:|--------:|:---------:|
+| LONG prompt `C[AD]→ED-1`          | 38 | +0.97  | 1.000 | **≈1.00** | ✅ yes |
+| LONG public-info `O[AD+1]→ED-1`   | 38 | +0.40  | 0.992 | **≈0.40** | ❌ no |
+| SHORT illiquid reversal `ED-1→+20`| 20 | +0.39  | 0.974 | **≈0.40** | ❌ no |
+
+(DSR uses ~10 examined configs; the exact figure depends on that assumption, but
+the ranking is stable.) Only the **announcement-timed long** clears the bar
+decisively. The two edges a *lazy* small trader could get on public info alone
+are nominally significant (PSR>0.97) but **do not survive** deflation — they are
+suggestive, not established.
+
 ## Verdict
 
 * **Common wisdom (effect is dead): rejected.** Announcement→rebalance abnormal
-  return ≈ **+6.5%, t≈6**, every year 2021–2026.
-* **But it rewards *prediction*, not laziness.** ~4.5% is an overnight gap at the
-  public announcement — you must be early. The clean public-info residual is
-  **~1.9%** (next-open entry → rebalance).
-* **The genuinely small-only edge is the short-side reversal in illiquid
-  additions (~+3.5% / 20d).**
+  return ≈ **+6.5%, t≈6, DSR≈1.0**, every year 2021–2026 — a robust edge.
+* **But it rewards *prediction* / prompt execution, not laziness.** ~4.5% is an
+  overnight gap at the (surprise) public announcement, so you must already be
+  positioned; there's no pre-announcement drift to ride in.
+* **The residuals available on public info alone are marginal:** the next-open
+  long (~+1.9%) and the illiquid-reversal short (~+3.5%/20d) are nominally
+  positive but fail multiple-testing deflation (DSR≈0.4). Real-looking, not
+  bankable.
 
 So the chat's scheme isn't "stupid" — but the free-lunch framing is. The alpha is
 real, it's front-loaded into the announcement, and the part that survives *at

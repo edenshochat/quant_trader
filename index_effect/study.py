@@ -78,6 +78,7 @@ ED_WINDOWS = {
     "reversal_ED1_ED20": ("ED", -1, 20),
 }
 AD_WINDOWS = {
+    "ann_pre_drift": ("AD", -10, -1),  # close[AD-10] -> close[AD-1]  (leakage/anticipation)
     "ann_day": ("AD", -1, 0),  # close[AD-1] -> close[AD]  (news lands after close)
     "buy_ADclose_ED1": ("AD_ED", 0, -1),  # close[AD] -> close[ED-1]
     "buy_ADclose_ED": ("AD_ED", 0, 0),  # close[AD] -> close[ED]
@@ -131,10 +132,10 @@ def study_event(
         iA = locate(idx, announcement)
         if 0 < iA < iE and iA + 1 < len(df):
             for name, (anchor, a, b) in AD_WINDOWS.items():
-                if anchor == "AD":
-                    cars[name] = car(df, iA + a, iA + b)
-                else:  # AD_ED: start relative to AD, end relative to ED
-                    cars[name] = car(df, iA + a, iE + b)
+                i0 = iA + a
+                i1 = (iA + b) if anchor == "AD" else (iE + b)
+                # skip a window that would run off the start of the series
+                cars[name] = car(df, i0, i1) if 0 <= i0 < len(df) else None
             # buy at the NEXT open (public-info, no-foreknowledge entry) needs the
             # open series; report.py fills "buy_open1_ED1" when opens are supplied.
             cars["lag_trading_days"] = iE - iA

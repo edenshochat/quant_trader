@@ -9,6 +9,7 @@ NOT financial advice — an educational research reproduction.
 from __future__ import annotations
 
 from .events import AdditionEvent, load_events, parse_changes
+from .significance import assess, per_trade_sharpe
 from .study import (
     EventResult,
     align,
@@ -30,4 +31,6 @@ __all__ = [
     "study_event",
     "summarize",
     "liquidity_terciles",
+    "assess",
+    "per_trade_sharpe",
 ]
