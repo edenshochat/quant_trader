@@ -9,6 +9,14 @@ NOT financial advice — an educational research reproduction.
 from __future__ import annotations
 
 from .events import AdditionEvent, load_events, parse_changes
+from .portfolio import (
+    Trade,
+    build_trade,
+    longest_underwater,
+    max_drawdown,
+    simulate,
+    worst_losing_streak,
+)
 from .significance import assess, per_trade_sharpe
 from .study import (
     EventResult,
@@ -33,4 +41,10 @@ __all__ = [
     "liquidity_terciles",
     "assess",
     "per_trade_sharpe",
+    "Trade",
+    "build_trade",
+    "simulate",
+    "max_drawdown",
+    "longest_underwater",
+    "worst_losing_streak",
 ]

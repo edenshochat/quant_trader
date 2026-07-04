@@ -14,7 +14,16 @@ import datetime as dt
 
 import pandas as pd
 
+import statistics as st
+
 from .events import load_events
+from .portfolio import (
+    build_trade,
+    longest_underwater,
+    max_drawdown,
+    simulate,
+    worst_losing_streak,
+)
 from .prices import load_nasdaq
 from .significance import assess
 from .study import (
@@ -129,9 +138,57 @@ def print_report(results: list) -> None:
     print("  (DSR>0.95 => the edge survives correction for the windows examined)")
 
 
+def print_pocket(spy) -> None:
+    """$100k pocket P&L and drawdown over the covered (Nasdaq ~5y) window."""
+    events = [
+        e for e in load_events() if e.effective >= dt.date(2020, 1, 1) and e.announcement
+    ]
+    trades = []
+    for ev in events:
+        px = load_nasdaq(ev.ticker)
+        if px is None or len(px) < 10:
+            continue
+        t = build_trade(px, ev.announcement, ev.effective, ev.ticker)
+        if t is not None:
+            trades.append(t)
+    if not trades:
+        print("\n(no pocket sim — no covered trades)")
+        return
+    trades.sort(key=lambda t: t.entry_date)
+    first, last = trades[0].entry_date, max(t.exit_date for t in trades)
+    calendar = [d.date().isoformat() for d in spy.index
+                if first <= d.date().isoformat() <= last]
+
+    curve, taken, skipped = simulate(trades, calendar, frac=1.0)
+    rets = [t.ret for t in taken]
+    dd = max_drawdown(curve)
+    yrs = (dt.date.fromisoformat(curve[-1][0]) - dt.date.fromisoformat(curve[0][0])).days / 365.25
+    final = curve[-1][1]
+    invested = sum(1 for d, _ in curve if any(t.entry_date <= d <= t.exit_date for t in taken))
+    streak, streak_names = worst_losing_streak(taken)
+
+    print(f"\n===== $100k POCKET — concrete P&L & drawdown ({curve[0][0]} → {curve[-1][0]}) =====")
+    print(f"  entry OPEN[AD+1], exit CLOSE[ED-1], no leverage, no slippage")
+    print(f"  trades: {len(taken)} taken, {len(skipped)} skipped (overlap)   "
+          f"invested ~{invested/len(curve)*100:.0f}% of the time")
+    print(f"  final ${final:,.0f}  ({final/100000-1:+.0%}, CAGR {(final/100000)**(1/yrs)-1:+.1%})   "
+          f"win {sum(r>0 for r in rets)/len(rets)*100:.0f}%  avg {st.mean(rets)*100:+.2f}%")
+    print(f"  worst trade {min(rets)*100:+.1f}%   worst losing streak {streak*100:+.1f}% "
+          f"({'+'.join(streak_names)})")
+    print(f"  >> MAX DRAWDOWN {dd['mdd']*100:.1f}%  (${dd['peak']:,.0f} {dd['peak_date']} "
+          f"→ ${dd['trough']:,.0f} {dd['trough_date']})   underwater up to "
+          f"{longest_underwater(curve)} trading days")
+    print("  position-size dial (fraction of pocket per trade):")
+    for f in (1.0, 0.5, 0.25):
+        c, _, _ = simulate(trades, calendar, frac=f)
+        print(f"    {f*100:3.0f}%  final ${c[-1][1]:>9,.0f}  ({c[-1][1]/100000-1:+6.0%})  "
+              f"maxDD {max_drawdown(c)['mdd']*100:6.1f}%")
+
+
 def main() -> None:
-    results, _ = build()
+    results, spy = build()
     print_report(results)
+    print_pocket(spy)
 
 
 if __name__ == "__main__":

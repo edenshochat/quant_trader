@@ -12,6 +12,13 @@ import numpy as np
 import pandas as pd
 
 from quant.index_effect.events import parse_changes
+from quant.index_effect.portfolio import (
+    build_trade,
+    longest_underwater,
+    max_drawdown,
+    simulate,
+    worst_losing_streak,
+)
 from quant.index_effect.significance import assess, per_trade_sharpe
 from quant.index_effect.study import (
     align,
@@ -146,6 +153,77 @@ def test_parse_changes_discards_out_of_window_announcement():
     wt = WIKITEXT_FIXTURE.replace("June 2, 2023", "January 2, 2023")
     panw = {e.ticker: e for e in parse_changes(wt)}["PANW"]
     assert panw.announcement is None
+
+
+def _ohlc(rows, start="2024-01-02"):
+    idx = pd.date_range(start, periods=len(rows), freq="B")
+    return pd.DataFrame(rows, index=idx, columns=["open", "close"])
+
+
+def test_build_trade_entry_open_exit_close():
+    # 10 business days; announce on day-2 date, effective on day-8 date.
+    rows = [(100, 100)] * 10
+    rows[3] = (110, 112)  # AD+1 open we should buy at (announcement was day index 2)
+    rows[6] = (120, 121)  # ED-1 close we should sell at (effective is day index 7)
+    df = _ohlc(rows)
+    ann = df.index[2].date()
+    eff = df.index[7].date()
+    t = build_trade(df, ann, eff, "T")
+    assert t.entry_px == 110  # OPEN on the first day after AD
+    assert t.exit_px == 121  # CLOSE on the last day before ED
+    assert abs(t.ret - (121 / 110 - 1)) < 1e-12
+
+
+def test_simulate_compounds_and_respects_no_leverage():
+    df = _ohlc([(100, 100)] * 12)
+    # two sequential winners of +10% each (open 100 -> close 110)
+    for i in (2, 8):
+        df.iloc[i, 0] = 100.0  # open
+    # trade 1: buy open[1]=100, sell close[3]
+    df.iloc[1, 0] = 100.0
+    df.iloc[3, 1] = 110.0
+    df.iloc[7, 0] = 100.0
+    df.iloc[9, 1] = 110.0
+    t1 = build_trade(df, df.index[0].date(), df.index[4].date(), "A")
+    t2 = build_trade(df, df.index[6].date(), df.index[10].date(), "B")
+    cal = [d.date().isoformat() for d in df.index]
+    curve, taken, skipped = simulate([t1, t2], cal, frac=1.0, start_cash=100.0)
+    assert len(taken) == 2 and not skipped
+    # 100 * 1.10 * 1.10 = 121
+    assert abs(curve[-1][1] - 121.0) < 1e-6
+
+
+def test_simulate_skips_overlapping_and_fraction_scales_drawdown():
+    df = _ohlc([(100, 100)] * 8)
+    df.iloc[1, 0] = 100.0
+    df.iloc[4, 1] = 80.0  # a -20% loser
+    loser = build_trade(df, df.index[0].date(), df.index[5].date(), "L")
+    cal = [d.date().isoformat() for d in df.index]
+    full = max_drawdown(simulate([loser], cal, frac=1.0, start_cash=100.0)[0])["mdd"]
+    half = max_drawdown(simulate([loser], cal, frac=0.5, start_cash=100.0)[0])["mdd"]
+    assert full < -0.15  # ~ -20%
+    assert half > full  # half size => shallower drawdown
+    assert abs(half - full / 2) < 0.02  # ~ linear in position size
+
+
+def test_max_drawdown_and_underwater():
+    curve = [("d1", 100), ("d2", 120), ("d3", 90), ("d4", 110), ("d5", 108)]
+    dd = max_drawdown(curve)
+    assert abs(dd["mdd"] - (90 / 120 - 1)) < 1e-12
+    assert dd["peak_date"] == "d2" and dd["trough_date"] == "d3"
+    assert longest_underwater(curve) == 3  # d3,d4,d5 all below the 120 peak
+
+
+def test_worst_losing_streak():
+    class T:
+        def __init__(self, r):
+            self.ret = r
+            self.ticker = f"{r:+.2f}"
+    trades = [T(0.05), T(-0.10), T(-0.05), T(0.03), T(-0.20)]
+    worst, names = worst_losing_streak(trades)
+    # candidates: [-10%,-5%] => -14.5% ; lone [-20%] => -20% (the worst)
+    assert abs(worst - (-0.20)) < 1e-9
+    assert names == ["-0.20"]
 
 
 def test_per_trade_sharpe():

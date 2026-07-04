@@ -143,6 +143,56 @@ real, it's front-loaded into the announcement, and the part that survives *at
 small size with no foreknowledge* is a couple of percent long into the rebalance
 plus a low-capacity reversal short.
 
+## A real $100k pocket — concrete P&L and max drawdown
+
+Turning the edge into an account. Fully executable, no leverage, no slippage
+(small size): **BUY at `OPEN[AD+1]`** (market-on-open the session after the
+after-close announcement — no foreknowledge), **SELL at `CLOSE[ED-1]`**
+(market-on-close into the reconstitution). The pocket compounds on **raw**
+returns; max drawdown is measured on the **daily mark-to-market** equity curve
+over SPY's full calendar (flat-cash gaps and mid-hold dips included).
+
+**All-in, one name at a time (2021-07 → 2026, 36 trades):**
+
+| metric | value |
+|---|---|
+| final equity (from $100k) | **$175k** (+75%, CAGR +12.6%) |
+| win rate / avg trade | 64% / +1.72% |
+| **worst single trade ("mistake")** | **APO −9.7%** |
+| worst losing streak | −10.8% (CSGP → PCG) |
+| **portfolio max drawdown** | **−17.8%** ($166k → $137k, Nov-2024 → Mar-2025) |
+| longest underwater | **276 trading days (>1 yr)** |
+| capital actually deployed | **~14% of the time** (in cash between events) |
+
+Two things matter for "max drawdown when mistakes happen":
+
+1. **It's a *cluster*, not one trade.** The −17.8% peak-to-trough was a run of
+   weak trades in late-2024/early-2025 (APO −9.7% plus mark-to-market dips),
+   and it took **over a year** to recover. Any single mistake caps near −10%.
+2. **It's a dial you control.** Because opportunities are sparse and serial
+   (you're invested only ~14% of the time), drawdown scales almost linearly with
+   how much of the pocket you commit per trade:
+
+| fraction per trade | final equity | max drawdown |
+|--------------------:|-------------:|-------------:|
+| 100% (all-in)       | $175k (+75%) | **−17.8%** |
+| 50%                 | $134k (+34%) | −9.3% |
+| 25%                 | $116k (+16%) | −4.7% |
+
+Because holds are short (~1–2 weeks) and infrequent, the pocket carries little
+market beta — it rode through the 2022 bear largely unscathed; the worst
+drawdown was idiosyncratic (bad picks), not the market.
+
+> **Coverage caveat:** the price source (Nasdaq) only serves ~5 years, and Yahoo
+> was rate-limited every attempt this session, so the pocket sim covers
+> **2021-07 → 2026**, not a full 2020 start. The 14 excluded 2020 → mid-2021
+> additions (TSLA, ETSY, ENPH, DPZ …) were mostly strong winners in a bull tape,
+> so including them would likely *raise* the return and is unlikely to deepen the
+> max drawdown (which is a 2024–25 event). Numbers use the realistic no-
+> foreknowledge open entry — the one that fails Deflated-Sharpe above — so treat
+> the +75% as illustrative of mechanics, and the **drawdown profile (~−18% all-in,
+> scaling with size, >1yr recovery) as the durable takeaway.**
+
 ## Caveats
 
 * Modern sample only (Nasdaq ≈5y); the pre-2021 decay comparison needs the Yahoo
