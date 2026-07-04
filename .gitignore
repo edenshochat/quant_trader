@@ -21,11 +21,11 @@ env/
 *.parquet
 *.db
 
-# index_effect cached market data (regenerate via index_effect.report)
-index_effect/_pricecache/
-index_effect/_wiki.json
 .env
 .env.*
+
+# transient Yahoo session cookie (not useful across sessions, not a secret to keep)
+index_effect/_pricecache/_yahoo_cookies.txt
 
 # OS / editor
 .DS_Store
