@@ -105,6 +105,44 @@ pytest quant/tests -v
 
 The HMM tests auto-skip if `hmmlearn` isn't installed.
 
+## Bonus study: the S&P 500 "index effect" (`index_effect/`)
+
+A self-contained empirical test of whether index-inclusion front-running still
+pays a *small* trader (no market impact), or has been arbitraged away as the
+"common wisdom" holds. It parses S&P 500 additions (with real **announcement**
+vs **effective** dates) from Wikipedia, pulls daily prices from Nasdaq/Yahoo,
+and runs a market-adjusted event study.
+
+**Headline (2021–2026, 38 announcement-dated adds):** buying at the announcement
+close and selling into the rebalance earns **~+6.5% market-adjusted (t≈6, 79%
+win), positive every year** and survives the repo's own Deflated-Sharpe
+multiple-testing guardrail (DSR≈1.0) — the effect is *not* dead. But ~4.5% of it
+is an overnight gap at the (surprise — no pre-announcement drift) public
+announcement, so it rewards *prediction* / prompt execution, not laziness. The
+residuals a lazy small trader could get on public info alone — the next-open long
+(~+1.9%) and shorting the post-rebalance reversal in **illiquid** additions
+(~+3.5%/20d) — are nominally positive but *fail* deflation (DSR≈0.4).
+
+A concrete **$100k pocket** (buy `OPEN[AD+1]`, sell `CLOSE[ED-1]`, no leverage,
+no slippage), 2020→2026, grows to ~$243k all-in (+143%, CAGR 15.4%), but its
+**max drawdown is −17.8%** — a late-2024/25 *cluster* of weak trades with a
+>1-year recovery — and that drawdown scales ~linearly with position size (−9% at
+half, −5% at quarter).
+
+**Cross-index:** the same logic run on every scheduled-reconstitution index with
+a dated change log (`cross_index.py`) confirms the announcement→rebalance edge is
+significant in all four families — S&P 500 **+6.1% (t=5.8)**, S&P 600 +3.5%
+(t=4.2), S&P 400 +3.1% (t=2.7), Nasdaq-100 +2.6% (t=2.9) — and is *largest in the
+S&P 500*, i.e. it scales with indexed AUM, not with how small-cap the add is.
+
+Full write-up and caveats: [`index_effect/FINDINGS.md`](index_effect/FINDINGS.md).
+
+```bash
+# reproduce (needs network the first time; then cached)
+PYTHONPATH=<repo parent> python -m quant.index_effect.report
+pytest tests/test_index_effect.py -v   # engine is unit-tested offline
+```
+
 ## Notes
 
 - **Walk-forward** rebuilds the states + matrix from scratch on every day using
