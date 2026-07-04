@@ -367,49 +367,76 @@ Compositions" PDF covering DAX, TecDAX, MDAX, and SDAX back to 1987/2003, in
 the same (date of change, date of announcement, deletion, addition) shape as
 the Wikipedia tables — found via web search, not obvious from STOXX's
 JS-rendered site (which blocks headless-browser access). This module parses
-its **DAX and TecDAX** sections only; MDAX/SDAX's much larger, more obscure
-small/mid-cap universe wasn't worth the manual ticker-verification effort this
-round. A handful of table rows where PDF text extraction lost the column
-structure (which name was added vs. removed) are dropped rather than guessed,
-as are 3 companies (ISRA VISION, Varta, SUSE S.A.) taken private or into
-insolvency with no surviving Yahoo history — see `europe.py`'s module
-docstring for the full accounting.
+**all four sections** — the complete German large/tech/mid/small-cap ladder,
+paralleling the US S&P 500/400/600 + Nasdaq-100 coverage.
 
-**Result: DAX shows the *opposite* of the US effect.** Announcement→rebalance,
-market-adjusted vs. each index's own benchmark (^GDAXI / ^TECDAX):
+A meaningful fraction of MDAX/SDAX rows couldn't be safely resolved: some
+reconstitution dates jumble many companies at once with the PDF's
+deletion/addition column structure lost in text extraction, and some long
+company names wrap across lines in a way this parser doesn't rejoin — both
+are dropped rather than guessed (this lowers MDAX/SDAX's yield versus the
+cleaner DAX/TecDAX tables). A further ~13 companies across all four indices
+were taken private, merged away, or restructured into insolvency with no
+surviving Yahoo history at any ticker/exchange variant tried (ISRA VISION,
+Varta, SUSE S.A., Steinhoff International, Gerry Weber, Leoni, Synlab,
+Vitesco Technologies, About You Holding, comdirect bank, and a few whose only
+surviving listing is a regional German exchange too shallow to reach their
+addition date) — see `europe.py`'s module docstring for the full accounting.
+
+**Result: the effect's sign and size flips completely across the German
+market-cap ladder, and doesn't line up with the US pattern at all.**
+Announcement→rebalance, market-adjusted vs. each index's own benchmark:
 
 | Index | n | mean | t | win% | DSR |
 |---|---:|---:|---:|---:|---:|
-| **DAX** | 27 | **−3.50%** | **−4.22** | **22%** | 0.00 |
-| TecDAX | 26 | +1.51% | +1.78 | 65% | 0.02 |
+| **DAX** (large-cap) | 27 | **−3.50%** | **−4.22** | **22%** | 0.00 |
+| TecDAX (tech) | 26 | +1.51% | +1.78 | 65% | 0.05 |
+| **MDAX** (mid-cap) | 27 | **+3.22%** | **+3.00** | **78%** | 0.27 |
+| SDAX (small-cap) | 54 | −0.38% | −0.41 | 52% | 0.00 |
 
-**DAX additions tend to *fall*, hard, between announcement and rebalance** —
-significant, and broad-based (21 of 27 events negative, not a couple of
-outliers), including ordinary additions (MTU Aero Engines −10.0%, Covestro
-−9.8%, Hannover Re −11.5%, GEA Group −5.2%) as well as recent spinoffs/IPOs
-(Siemens Energy −13.0% and −4.2% on two separate occasions, Porsche AG −7.6%).
-The `$100k` all-in pocket for DAX **loses 59% of capital** (max DD −58%) over
-this sample. TecDAX is directionally like the US (positive), but weak and
-statistically insignificant (DSR≈0.02) on a sample this size.
+$100k all-in pocket per index (same window each, 2018→2023-26):
 
-**Tested and rejected:** pre-announcement front-running ("buy the rumor, sell
-the news" — plausible since DAX's reconstitution is free-float-market-cap
-rules-based and thus more *predictable* than the S&P's discretionary
-committee). `CAR[AD-10→AD-1]` = −0.32% (t=−0.31, n.s.) — no significant
-pre-announcement drift, so the negative reaction isn't explained by smart money
-front-running the announcement and then selling into it.
+| Index | final | max DD |
+|---|---:|---:|
+| DAX | $41k (−59%) | −58% |
+| TecDAX | $118k (+18%) | −24% |
+| **MDAX** | **$161k (+61%)** | **−17%** |
+| SDAX | $59k (−41%) | −51% |
 
-**Unconfirmed hypotheses** (flagged as such, not concluded): the sample is
-small (27 events over 2018–2025) and concentrated in a period when several
-DAX additions were recent spinoffs/IPOs (Siemens Energy, Daimler Truck,
-Porsche) subject to unrelated post-spinoff share overhang, and/or names that
-were richly priced 2020–21 growth/COVID darlings (HelloFresh, Delivery Hero,
-Zalando, Sartorius) heading into the 2022 growth-stock unwind — either could
-inject a directional bias unrelated to the inclusion mechanism itself that a
-sample of this size can't fully average out. This needs a larger sample (MDAX/
-SDAX, or extending further back) before treating "DAX inclusion is a *sell*
-signal" as a confirmed, tradeable finding rather than a striking but
-preliminary one.
+**DAX (large-cap) additions tend to *fall*, hard** — broad-based (21 of 27
+events negative), including ordinary additions (MTU Aero Engines −10.0%,
+Covestro −9.8%, Hannover Re −11.5%) and recent spinoffs/IPOs (Siemens Energy
+−13.0%/−4.2%, Porsche AG −7.6%). **MDAX (mid-cap) is the mirror image** —
+strong, broad-based, 78%-win-rate gains — the best risk/reward of any index
+in this entire study (DSR=0.27, still short of the 0.95 "survives correction"
+bar, but the highest of any single-index result here). **SDAX (small-cap) is
+essentially flat** (t=−0.41 on the *largest* sample in the whole project,
+n=54 — a precise null, not just noise) — a sharp contrast with the **US**,
+where small-caps (S&P 600) showed the *strongest* effect of any US index.
+There is no simple "smaller = bigger pop" (or "bigger = bigger pop") rule that
+holds across both markets; whatever drives index-fund-flow pricing pressure in
+Germany does not scale with market-cap the same way it does in the US.
+
+**Tested and rejected** (for DAX): pre-announcement front-running ("buy the
+rumor, sell the news" — plausible since DAX's reconstitution is free-float-
+market-cap rules-based and thus more *predictable* than the S&P's
+discretionary committee). `CAR[AD-10→AD-1]` = −0.32% (t=−0.31, n.s.) across
+all four indices' pre-drift checks — no significant pre-announcement drift
+anywhere, so none of the sign flips are explained by smart money front-running
+the announcement and trading out of it before the print.
+
+**Unconfirmed hypotheses** (flagged as such, not concluded): DAX's negative
+sample is concentrated in a period when several additions were recent
+spinoffs/IPOs (Siemens Energy, Daimler Truck, Porsche) subject to unrelated
+post-spinoff share overhang, and/or richly-priced 2020–21 growth/COVID
+darlings (HelloFresh, Delivery Hero, Zalando, Sartorius) heading into the 2022
+unwind — either could inject a directional bias unrelated to the inclusion
+mechanism that a sample of 27 can't fully average out. MDAX and SDAX (n=27,
+n=54) are less exposed to that particular bias and still show a totally
+different pattern from each other, which argues the market-cap-tier effect is
+real rather than purely a sampling artifact — but four index-level t-stats is
+still a small number of "trials" for a claim this surprising; treat it as a
+strong, well-tested lead, not a settled cross-market law.
 
 ```bash
 PYTHONPATH=<repo parent> python -m quant.index_effect.europe_report

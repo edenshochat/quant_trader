@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from quant.index_effect.europe import extract_additions, parse_change_blocks
+from quant.index_effect.europe import INDEX_CONFIG, NAME_TO_TICKER, extract_additions, parse_change_blocks
 from quant.index_effect.events import parse_changes
 from quant.index_effect.multi_index import (
     dsr_weights,
@@ -487,6 +487,19 @@ def test_extract_additions_resolves_pure_addition_block():
     assert tickers == {"AIR.DE", "BNR.DE", "HFG.DE"}
     assert all(eff == dt.date(2021, 9, 20) for eff, _, _ in additions)
     assert dropped == []
+
+
+def test_index_config_covers_the_full_german_market_cap_ladder():
+    assert set(INDEX_CONFIG) == {"DAX", "TecDAX", "MDAX", "SDAX"}
+    for marker, bench in INDEX_CONFIG.values():
+        assert "INDEX COMPOSITION" in marker
+        assert bench.startswith("^")
+
+
+def test_name_to_ticker_has_no_blank_entries():
+    for name, ticker in NAME_TO_TICKER.items():
+        assert name.strip() and ticker.strip()
+        assert "." in ticker  # every entry is an exchange-suffixed ticker
 
 
 def test_extract_additions_drops_ambiguous_blocks_instead_of_guessing():

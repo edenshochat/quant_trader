@@ -1,4 +1,6 @@
-"""European index-inclusion events: DAX and TecDAX (Deutsche Börse / STOXX).
+"""European index-inclusion events: DAX, TecDAX, MDAX, and SDAX (Deutsche Börse
+/ STOXX) — the full German blue-chip-to-small-cap ladder, paralleling the US
+S&P 500/400/600 + Nasdaq-100 coverage.
 
 Unlike the S&P family and Nasdaq-100, no major European index (FTSE 100, DAX,
 CAC 40, IBEX 35, FTSE MIB, AEX, SMI, EURO STOXX 50) has a Wikipedia article with
@@ -14,17 +16,27 @@ anti-bot-protected site).
 (https://www.stoxx.com/document/Indices/Common/Indexguide/Historical_Index_Compositions.pdf)
 covering DAX, TecDAX, MDAX, and SDAX back to their 1987/2003 inception, in the
 same (date of change, date of announcement, deletion, addition) shape as the
-Wikipedia tables. This module parses that PDF's DAX and TecDAX sections (MDAX
-and SDAX are scoped out — their far larger, more obscure small/mid-cap universe
-makes reliable company-name -> ticker mapping impractical by hand).
+Wikipedia tables. This module parses all four sections.
 
-Even within DAX/TecDAX, a handful of table rows couldn't be safely resolved:
-multi-company blocks where the PDF's column layout is lost in text extraction
-(no way to tell which name was added vs. removed) are dropped rather than
-guessed — see ``extract_additions``'s ``dropped`` return value. Three
-companies (ISRA VISION, Varta, SUSE S.A.) were taken private or restructured
-into insolvency and have no surviving Yahoo Finance history at any ticker
-variant tried; their addition events are also dropped.
+A meaningful fraction of MDAX/SDAX rows couldn't be safely resolved: the PDF's
+column layout is sometimes lost in text extraction (no way to tell which name
+was added vs. removed on a jumbled multi-company reconstitution date), and
+some long company names wrap across lines in a way this parser doesn't
+currently rejoin (e.g. "Steinhoff International" / "Holdings NV" as two
+fragments) — both cases are dropped rather than guessed, see
+``extract_additions``'s ``dropped`` return value. This lowers MDAX/SDAX's
+yield noticeably versus DAX/TecDAX (where most reconstitutions are clean
+single swaps); rejoining wrapped names is a documented follow-up, not
+attempted here. Companies taken private, merged away, or restructured into
+insolvency with no surviving Yahoo Finance history at any ticker variant
+tried (e.g. ISRA VISION, Varta, SUSE S.A., Steinhoff International, Gerry
+Weber, Leoni, Synlab, Vitesco Technologies, About You Holding, comdirect
+bank) are also dropped, as are a handful of resolved tickers (Metro AG,
+CompuGroup Medical, Dialog Semiconductor, Shop Apotheke Europe, Software AG)
+whose only surviving Yahoo listing is a regional German exchange (Hamburg,
+Munich, Frankfurt) with historical depth that doesn't reach back to their
+particular addition dates — a real symbol, but Yahoo's archive for it is
+too shallow for that specific event.
 
 The resulting ``NAME_TO_TICKER`` mapping was hand-verified against Yahoo
 Finance (including cross-exchange fallbacks — e.g. Covestro's Xetra listing
@@ -44,6 +56,8 @@ PDF_URL = "https://www.stoxx.com/document/Indices/Common/Indexguide/Historical_I
 INDEX_CONFIG = {
     "DAX": ("DAX® INDEX COMPOSITION", "^GDAXI"),
     "TecDAX": ("TECDAX® INDEX COMPOSITION", "^TECDAX"),
+    "MDAX": ("MDAX® INDEX COMPOSITION", "^MDAXI"),
+    "SDAX": ("SDAX® INDEX COMPOSITION", "^SDAXI"),
 }
 
 DATE = r"(\d{2})\.(\d{2})\.(\d{4})"
@@ -80,7 +94,7 @@ NAME_TO_TICKER: dict[str, str] = {
     "Draegerwerk": "DRW3.DE",
     # Varta AG: 2024 insolvency restructuring, shares cancelled -- not mapped.
     "TeamViewer AG": "TMV.DE",
-    "Dialog Semiconductor": "DLG.DE",
+    "Dialog Semiconductor": "DLGS.DE",
     "RIB Software": "RSTA.DE",
     "Eckert + Ziegler": "EUZ.DE", "Eckert+Ziegler AG": "EUZ.DE", "Eckert+Ziegler": "EUZ.DE",
     "LPKF Laser & Electronics AG": "LPK.DE", "LPKF Laser+Electronics": "LPK.DE",
@@ -93,15 +107,80 @@ NAME_TO_TICKER: dict[str, str] = {
     "Atoss Software AG": "AOF.DE",
     "Evotec SE": "EVT.DE",
     "Verbio Ver.Bioenergie": "VBK.DE", "Verbio": "VBK.DE",
-    "Kontron AG": "KTN.DE", "Software AG": "SOW.DE", "PNE AG": "PNE3.DE", "PNE": "PNE3.DE",
+    "Kontron AG": "KTN.DE", "Software AG": "SOW.F", "PNE AG": "PNE3.DE", "PNE": "PNE3.DE",
     "Telefonica": "O2D.DE", "Suess Microtec": "SMHN.DE",
     "MorphoSys": "MOR.DE", "Elmos Semiconductor": "ELG.DE",
     "IONOS Group": "IOS.DE", "Nexus": "NXU.DE",
     "Draegerwerk Pref": "DRW3.DE",
-    "CompuGroup Medical": "COP.DE",
+    "CompuGroup Medical": "COP.HM",
     "PVA Tepla": "TPE.DE",
     "Energiekontor": "EKT.DE",
     "Formycon": "FYB.DE", "Ottobock": "OBCK.DE",
+    # MDAX
+    "Ceconomy AG": "CEC.DE", "Jungheinrich AG VZO": "JUN3.DE", "Qiagen": "QIA.DE",
+    # Leoni AG: no surviving Yahoo history found under any ticker tried -- not mapped.
+    "Siemens Health.": "SHL.DE",
+    "Stroeer SE + CO. KGAA": "SAX.DE", "UTD. Internet AG": "1U1.DE",
+    "Talanx AG": "TLX.DE", "Sartorius AG VZO": "SRT3.DE",
+    "Morphosys AG": "MOR.DE", "Freenet AG": "FNTN.DE", "Siltronic AG": "WAF.DE",
+    "Nemetschek SE": "NEM.DE", "Bechtle AG": "BC8.DE", "Alstria Office REIT-AG": "AOX.DE",
+    "CTS Eventim": "EVD.DE", "Carl Zeiss Meditec AG": "AFX.DE",
+    "Knorr-Bremse AG": "KBX.DE", "Salzgitter AG": "SZG.DE", "Schaeffler AG": "SHA0.DE",
+    "Wacker Chemie AG": "WCH.DE", "Grenke AG": "GLJ.DE", "Axel Springer SE": "SPR.DE",
+    "Cancom SE": "COK.DE", "Innogy SE": "IGY.DE",
+    "Deutsche EuroShop": "DEQ.DE", "Norma Group SE": "NOEJ.DE", "Rational AG": "RAA.DE",
+    "Fielmann AG": "FIE.DE", "Deutsche Pfandbriefbank AG": "PBB.DE",
+    "RTL Group": "RRTL.DE", "Shop Apotheke Europe": "SAE1.MU", "Rocket Internet": "RKET.HM",
+    "Aareal Bank AG": "ARL.DE", "Metro AG": "B4B.HM", "Encavis AG": "CAP.DE",
+    "Osram Licht AG": "OSR.HM", "Auto1 Group SE": "AG1.DE", "Befesa S.A.": "BFSA.DE",
+    "Hypoport SE": "HYQ.DE", "Zooplus AG": "ZO1.HM",
+    "Hella GmbH + Co. KGAA": "HLE.DE", "Sixt SE": "SIX2.DE", "Uniper SE": "UN0.DE",
+    "Grand City Properties": "GYC.DE", "Stabilus SE": "STM.F",
+    "Jenoptik AG": "JEN.DE", "Krones AG": "KRN.DE", "Redcare Pharmacy": "RDC.DE",
+    "Aroundtown SA": "AT1.DE",
+    # Vitesco Technologies Group: no surviving Yahoo history found -- not mapped.
+    "Prosiebensat.1": "PSM.DE", "Duerr": "DUE.DE", "Bilfinger": "GBF.DE",
+    "SIXT": "SIX2.DE", "TUI": "TUI1.DE", "Traton": "8TRA.DE", "Schott Pharma": "1SXP.DE",
+    "Gerresheimer": "GXI.DE", "DWS Group GmbH & Co. KgaA": "DWS.DE",
+    "FlatexDEGIRO N": "FTK.DE", "Renk": "R3NK.DE", "Deutz": "DEZ.DE",
+    "Compugroup Med.": "COP.HM", "Hannover Rueck": "HNR1.DE",
+    "Uniper": "UN01.DE", "Verbio Ver. Bionenergie": "VBK.DE",
+    "Rheinmetall AG": "RHM.DE", "Verbio AG": "VBK.DE",
+    "UTD. Internet AG Evotec SE": "EVT.DE",  # (defensive alias; see dropped-line notes)
+    "Vantage Towers AG Hochtief AG": "HOT.DE",
+    # SDAX
+    "Südzucker AG": "SZU.DE", "CORESTATE Capital Holding S.A.": "CCAP.DE",
+    "JOST Werke AG": "JST.DE", "Scout24 AG": "G24.DE", "Delivery Hero AG": "DHER.DE",
+    "DWS Group GmbH & Co. KgaA ": "DWS.DE", "Aumann AG": "AAG.DE",
+    "Biotest AG VZ": "BIO3.DE", "Elringklinger AG": "ZIL2.DE", "Grammer AG": "GMM.DE",
+    "Pfeiffer Vacuum Tech.": "PFV.DE", "RIB Software SE": "RSTA.DE",
+    "Dr. Hoenle AG": "HNL.DE", "Dr. Hönle AG": "HNL.DE", "BayWa AG": "BYW6.DE",
+    "MediGene AG": "MDG1.DE", "Amadeus FiRe AG": "AAD.DE", "DMG Mori AG": "GIL.DE",
+    "VTG AG": "VT9.DE", "Vossloh AG": "VOS.DE", "Eckert & Ziegler AG": "EUZ.DE",
+    "Hapag-Lloyd AG": "HLAG.DE", "Instone Real Estate Group AG": "INS.DE",
+    "Dermapharm Holding": "DMP.DE",
+    # comdirect bank AG: absorbed into Commerzbank (2020); no surviving Yahoo history -- not mapped.
+    "TLG Immobilien AG": "TLG.DE", "LPKF Laser & Electronics AG": "LPK.DE",
+    "Adler Real Estate AG": "ADL.DE", "Elmos Semiconductor AG": "ELG.DE",
+    "Godewind Immobilien AG": "GWD.DE", "SGL Carbon": "SGL.DE",
+    "SNP Schneider-Neureither &": "SHF.DE", "Heidelberger": "HDD.DE",
+    "Sixt Leasing": "SIX3.DE", "MLP SE": "MLP.DE", "Rhön-Klinikum AG": "RHK.DE",
+    "Tele Columbus AG": "TC1.HM", "HORNBACH-Baumarkt-AG": "HBM.DE",
+    "Bertrandt AG": "BDT.DE", "Medios AG": "ILM1.DE", "Secunet Security Networks": "YSN.DE",
+    "CropEnergies AG": "CE2.HM", "FlatexDEGIRO AG": "FTK.DE", "WashTec AG": "WSU.DE",
+    "Deutsche Beteiligungs AG": "DBAN.DE", "Koenig + Bauer AG": "SKB.DE",
+    "Corestate Capital": "CCAP.DE", "Nordex SE": "NDX1.DE",
+    # About You Holding: no surviving Yahoo history found under any ticker tried -- not mapped.
+    "Borussia Dortmund": "BVB.DE", "PVA Tepla AG": "TPE.DE",
+    "Sto SE+Co. KGAA VZO": "STO3.DE", "Basler AG": "BSL.DE",
+    # Synlab AG: no surviving Yahoo history found under any ticker tried -- not mapped.
+    "Basler": "BSL.DE", "Adesso SE": "ADN1.DE", "Adler Group S.A.": "ADJ.DE",
+    "Takkt AG": "TTK.DE", "SFC Energy AG": "F3C.DE", "DIC Asset AG": "DIC.DE",
+    "Mutares SE & Co.": "MUX.DE", "KSB": "KSB3.DE", "ZEAL Network SE": "TIMA.DE",
+    "Thyssenkrupp Nucera": "NCH2.DE", "Alzchem Group AG": "ACT.DE",
+    "Douglas": "DOU.DE", "Nexus": "NXU.DE", "Springer Nature": "SPG1.DE",
+    "New Work SE": "NWO.DE", "Instone Real Estate Group": "INS.DE",
+    "Adtran": "ADV.DE", "AUTO1 Group": "AG1.DE",
 }
 
 

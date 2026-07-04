@@ -148,14 +148,17 @@ only baseline on both return and drawdown.
 
 **Europe (`europe.py`):** no major European index has a Wikipedia-parseable
 change log — but STOXX itself publishes an official "Historical Index
-Compositions" PDF for DAX/TecDAX/MDAX/SDAX. Running the same study on
-DAX/TecDAX turns up a genuinely surprising, opposite-sign result: **DAX
-additions tend to *fall* significantly into the rebalance** (mean −3.50%,
-t=−4.22, only 22% win — a $100k all-in DAX pocket *loses* 59%), while TecDAX is
-weakly positive like the US but not significant on this sample size (n=26-27).
-Pre-announcement front-running was tested as an explanation and rejected
-(no significant pre-drift) — see `FINDINGS.md` for the honest, unconfirmed
-hypotheses about why.
+Compositions" PDF covering the full German ladder: DAX, TecDAX, MDAX, SDAX.
+The effect's sign and size **flips completely across market-cap tiers, and
+doesn't match the US pattern**: DAX (large-cap) additions *fall* significantly
+into the rebalance (mean −3.50%, t=−4.22, 22% win — a $100k all-in DAX pocket
+*loses* 59%); **MDAX (mid-cap) is the mirror image** — strong, broad-based
+gains (+3.22%, t=3.00, 78% win, pocket +61%); SDAX (small-cap) is essentially
+flat (t=−0.41 on n=54, the largest sample in the project) — the opposite of
+the US, where small-caps (S&P 600) showed the *strongest* effect. Pre-
+announcement front-running was tested as an explanation for the DAX reversal
+and rejected (no significant pre-drift anywhere) — see `FINDINGS.md` for the
+full results and honest, unconfirmed hypotheses about why.
 
 Full write-up and caveats: [`index_effect/FINDINGS.md`](index_effect/FINDINGS.md).
 
