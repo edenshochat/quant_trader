@@ -24,7 +24,7 @@ from .portfolio import (
     simulate,
     worst_losing_streak,
 )
-from .prices import load_nasdaq
+from .prices import load_nasdaq, load_yahoo
 from .significance import assess
 from .study import (
     align,
@@ -138,14 +138,26 @@ def print_report(results: list) -> None:
     print("  (DSR>0.95 => the edge survives correction for the windows examined)")
 
 
+NASDAQ_HISTORY_START = dt.date(2021, 7, 1)  # Nasdaq API serves only ~5y
+
+
+def _load_ohlc(ev):
+    """Raw OHLC for one event: Nasdaq for recent adds, Yahoo (authenticated) for
+    pre-2021 adds that predate Nasdaq's ~5y history."""
+    if ev.announcement < NASDAQ_HISTORY_START:
+        return load_yahoo(ev.ticker, ev.announcement - dt.timedelta(days=10),
+                          ev.effective + dt.timedelta(days=35))
+    return load_nasdaq(ev.ticker)
+
+
 def print_pocket(spy) -> None:
-    """$100k pocket P&L and drawdown over the covered (Nasdaq ~5y) window."""
+    """$100k pocket P&L and drawdown, 2020 -> now (Nasdaq + authenticated Yahoo)."""
     events = [
         e for e in load_events() if e.effective >= dt.date(2020, 1, 1) and e.announcement
     ]
     trades = []
     for ev in events:
-        px = load_nasdaq(ev.ticker)
+        px = _load_ohlc(ev)
         if px is None or len(px) < 10:
             continue
         t = build_trade(px, ev.announcement, ev.effective, ev.ticker)
@@ -156,8 +168,13 @@ def print_pocket(spy) -> None:
         return
     trades.sort(key=lambda t: t.entry_date)
     first, last = trades[0].entry_date, max(t.exit_date for t in trades)
-    calendar = [d.date().isoformat() for d in spy.index
-                if first <= d.date().isoformat() <= last]
+    # master calendar: SPY (Nasdaq ~5y) extended back with Yahoo SPY for 2020-21
+    cal_dates = {d.date().isoformat() for d in spy.index}
+    if first < NASDAQ_HISTORY_START.isoformat():
+        yspy = load_yahoo("SPY", dt.date(2019, 12, 1), dt.date(2021, 8, 15))
+        if yspy is not None:
+            cal_dates |= {d.date().isoformat() for d in yspy.index}
+    calendar = sorted(d for d in cal_dates if first <= d <= last)
 
     curve, taken, skipped = simulate(trades, calendar, frac=1.0)
     rets = [t.ret for t in taken]

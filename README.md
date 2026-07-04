@@ -124,10 +124,11 @@ residuals a lazy small trader could get on public info alone — the next-open l
 (~+3.5%/20d) — are nominally positive but *fail* deflation (DSR≈0.4).
 
 A concrete **$100k pocket** (buy `OPEN[AD+1]`, sell `CLOSE[ED-1]`, no leverage,
-no slippage) over 2021–2026 grows to ~$175k all-in, but its **max drawdown is
-−17.8%** — a late-2024/25 *cluster* of weak trades with a >1-year recovery — and
-that drawdown scales ~linearly with position size (−9% at half, −5% at quarter).
-Full write-up and caveats: [`index_effect/FINDINGS.md`](index_effect/FINDINGS.md).
+no slippage), 2020→2026, grows to ~$243k all-in (+143%, CAGR 15.4%), but its
+**max drawdown is −17.8%** — a late-2024/25 *cluster* of weak trades with a
+>1-year recovery — and that drawdown scales ~linearly with position size (−9% at
+half, −5% at quarter). Full write-up and caveats:
+[`index_effect/FINDINGS.md`](index_effect/FINDINGS.md).
 
 ```bash
 # reproduce (needs network the first time; then cached)

@@ -104,23 +104,59 @@ def load_nasdaq(
     return None
 
 
+_YAHOO_CRUMB: list = [None]  # lazily established (cookie jar + crumb)
+
+
+def _yahoo_session() -> str | None:
+    """Return a Yahoo crumb, establishing cookies first. The anonymous chart
+    endpoint gets 429-throttled hard; an authenticated (cookie+crumb) session is
+    not. Cookies are written to a jar the subsequent _curl calls reuse."""
+    if _YAHOO_CRUMB[0] is not None:
+        return _YAHOO_CRUMB[0] or None
+    jar = os.path.join(DEFAULT_CACHE, "_yahoo_cookies.txt")
+    os.makedirs(DEFAULT_CACHE, exist_ok=True)
+    base = ["curl", "-sS", "-H", f"User-Agent: {UA}", "-c", jar, "-b", jar]
+    if os.path.exists(CA):
+        base += ["--cacert", CA]
+    def _valid(c: str) -> bool:
+        return bool(c) and " " not in c and "<" not in c and 6 <= len(c) <= 24
+
+    for attempt in range(5):
+        for u in ("https://finance.yahoo.com/quote/SPY", "https://fc.yahoo.com"):
+            subprocess.run(base + [u], capture_output=True, text=True, timeout=30)
+        crumb = subprocess.run(
+            base + ["https://query1.finance.yahoo.com/v1/test/getcrumb"],
+            capture_output=True, text=True, timeout=30,
+        ).stdout.strip()
+        if _valid(crumb):
+            _YAHOO_CRUMB[0] = crumb
+            return crumb
+        time.sleep(5 * (attempt + 1))  # getcrumb itself is rate-limited when hammered
+    _YAHOO_CRUMB[0] = ""  # give up; caller falls back to anonymous (likely 429)
+    return None
+
+
 def load_yahoo(
     ticker: str,
     start: dt.date,
     end: dt.date,
     cache_dir: str = DEFAULT_CACHE,
-    tries: int = 6,
-    min_interval: float = 3.0,
-    _last: list = [0.0],
+    tries: int = 5,
 ) -> pd.DataFrame | None:
-    """Load daily OHLCV from Yahoo's chart API (adjusted close). Paced + retried
-    to survive rate limiting; returns ``None`` if unavailable."""
+    """Load daily OHLCV from Yahoo's chart API via an authenticated session.
+
+    ``close`` is the **raw** close (matching Nasdaq's semantics, for the pocket
+    P&L); an ``adjclose`` column carries the dividend/split-adjusted series.
+    Returns ``None`` if unavailable.
+    """
     os.makedirs(cache_dir, exist_ok=True)
     fp = os.path.join(cache_dir, f"yahoo_{ticker}_{start}_{end}.json".replace("/", "_"))
     if os.path.exists(fp):
         cached = json.load(open(fp))
-        if not (isinstance(cached, dict) and "Too Many Requests" in str(cached)):
-            return None if isinstance(cached, dict) else _frame(cached)
+        return None if isinstance(cached, dict) else _frame_adj(cached)
+
+    crumb = _yahoo_session()
+    jar = os.path.join(DEFAULT_CACHE, "_yahoo_cookies.txt")
 
     def unix(d):
         return int(time.mktime(dt.date(d.year, d.month, d.day).timetuple()))
@@ -131,22 +167,23 @@ def load_yahoo(
         url = (
             f"https://{host}.finance.yahoo.com/v8/finance/chart/{ticker}"
             f"?period1={p1}&period2={p2}&interval=1d&events=div"
+            + (f"&crumb={crumb}" if crumb else "")
         )
-        gap = time.time() - _last[0]
-        if gap < min_interval:
-            time.sleep(min_interval - gap)
-        _last[0] = time.time()
+        args = ["curl", "-sS", "-H", f"User-Agent: {UA}", "-b", jar, "-c", jar]
+        if os.path.exists(CA):
+            args += ["--cacert", CA]
+        args.append(url)
         try:
-            j = json.loads(_curl(url))
-        except Exception as exc:
-            time.sleep((10 if "Too Many Requests" in str(exc) else 3) * (i + 1))
+            j = json.loads(subprocess.run(args, capture_output=True, text=True, timeout=40).stdout)
+        except Exception:
+            time.sleep(3 * (i + 1))
             continue
         err = j.get("chart", {}).get("error")
         if err:
             if str(err.get("code")) in ("Not Found", "No data found, symbol may be delisted"):
                 json.dump({"__error__": str(err)}, open(fp, "w"))
                 return None
-            time.sleep(6 * (i + 1))
+            time.sleep(4 * (i + 1))
             continue
         res = j["chart"]["result"][0]
         ts = res.get("timestamp", [])
@@ -154,18 +191,25 @@ def load_yahoo(
         adj = res["indicators"].get("adjclose", [{}])[0].get("adjclose", q.get("close"))
         rows = []
         for k, t in enumerate(ts):
-            c = adj[k] if adj and adj[k] is not None else q["close"][k]
-            if c is None:
+            rawc = q["close"][k]
+            if rawc is None:
                 continue
             rows.append(
                 [
                     dt.datetime.utcfromtimestamp(t).date().isoformat(),
-                    float(c),
+                    float(rawc),  # raw close (pocket P&L)
                     float(q["open"][k]) if q.get("open") and q["open"][k] else None,
                     float(q["volume"][k]) if q.get("volume") and q["volume"][k] else None,
+                    float(adj[k]) if adj and adj[k] is not None else float(rawc),  # adjclose
                 ]
             )
         rows.sort()
         json.dump(rows, open(fp, "w"))
-        return _frame(rows)
+        return _frame_adj(rows)
     return None
+
+
+def _frame_adj(rows: list[list]) -> pd.DataFrame:
+    df = pd.DataFrame(rows, columns=["date", "close", "open", "volume", "adjclose"])
+    df["date"] = pd.to_datetime(df["date"])
+    return df.set_index("date").sort_index()
