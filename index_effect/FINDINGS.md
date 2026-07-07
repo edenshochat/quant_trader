@@ -253,10 +253,210 @@ illiquidity. Different windows surface different halves of the same mechanism.
 The 2020–21 small-cap raw figures also carry post-COVID beta — the market-adjusted
 column strips that and the ranking holds.)
 
+## Pooling across indices, hedging, and position sizing (`multi_index.py`)
+
+The natural next question: does *combining* the four index sleeves into one
+pocket reduce risk, and is there a smarter way to size capital across them than
+splitting it evenly? Four hypotheses, tested in order, each correcting the last.
+
+**Setup:** one sleeve per index (S&P 500/400/600, Nasdaq-100), each trading only
+its own announcement-dated additions, all-in one name at a time within the
+sleeve (reusing `portfolio.simulate` unchanged) — 2021-07→2026-06, Nasdaq-only
+window for reproducibility.
+
+**1. Baseline — does each index sleeve work in isolation?** No. Trading the
+realistic no-foreknowledge entry (`buy OPEN[AD+1]`) all-in:
+
+| Sleeve | final ($100k start) | max drawdown | n |
+|---|---:|---:|---:|
+| S&P 500 (SPY) | $162k (+62%) | −20.3% | 40 |
+| **S&P 400 MidCap (MDY)** | **$33k (−66.6%)** | **−75.3%** | 88 |
+| **S&P 600 SmallCap (IJR)** | **$21k (−78.6%)** | **−82.3%** | 114 |
+| Nasdaq-100 (QQQ) | $234k (+134%) | −12.8% | 13 |
+
+The mid/small-cap sleeves don't just underperform — they're **catastrophic**,
+despite the cross-index study (above) showing a *strongly positive, highly
+significant* market-adjusted edge for these same indices (S&P 600 CAR t≈10 on
+the full sample). Something is badly wrong with trading that edge all-in.
+
+**2. Hypothesis: it's unhedged market beta** (mid/small caps got hit by the
+2022–24 rate-hike bear market while holding the position). **Rejected.**
+Building each trade market-neutral (long stock / short the index's own ETF via
+`build_hedged_trade`) barely moves the numbers — S&P 400 arithmetic mean is
+**−0.72% unhedged and −0.72% hedged** (identical to 2 decimals); S&P 600 is
+−0.69% vs −0.79%. Hedging out the benchmark changes nothing, which rules out
+"the sleeve got carried down by a falling market" as the explanation.
+
+**3. Hypothesis: the realistic entry misses the entire edge.** **Confirmed.**
+The cross-index CAR uses `buy_ADclose_ED1` — entered at `close[AD]`, the
+announcement day itself — while the pocket sim's "realistic" entry waits for
+`open[AD+1]`, one session later. Rebuilding trades entered at `close[AD]`
+(`build_trade_prompt` — requires trading at/immediately after the after-close
+announcement, materially harder to execute than a next-morning order):
+
+| Sleeve | n | arithmetic mean | std dev | win% |
+|---|---:|---:|---:|---:|
+| S&P 500 | 44 | +5.87% | 7.75% | 75% |
+| S&P 400 MidCap | 102 | **+2.41%** | 8.62% | 64% |
+| S&P 600 SmallCap | 146 | **+4.61%** | 8.55% | 77% |
+| Nasdaq-100 | 13 | +9.76% | 28.76% | 85% |
+
+For mid/small caps, **essentially the entire edge lives in the overnight
+announcement-day gap.** Wait for the safe next-morning open and there's nothing
+left (arithmetic mean ≈ 0, occasionally negative) — just the downside tail risk
+of ~8% per-trade volatility with real double-digit losers (KD −24.6%, EMBC
+−30.7%, ONL −28.3%). That combination — near-zero mean, high variance, fat left
+tail — is exactly what all-in compounding punishes hardest.
+
+**4. The all-in-compounded numbers for the prompt entry are *also* not to be
+believed** (S&P 600 "compounds" to +4,459% over 146 trades) — not a bug, just
+what betting 100% of the bankroll on 146 sequential trades with a genuine edge
+does mathematically. It's the same lesson as #1 from the other direction:
+**all-in sizing turns a real edge into an absurd, uninvestable number, and turns
+a weak/zero edge into ruin.** Sizing, not the edge itself, is the problem in
+both directions.
+
+**The fix — fractional position sizing** (`simulate(..., frac=f)`), same lever
+already used for the single-S&P-500 pocket:
+
+| frac | SPY (open_next) | MDY | IJR | QQQ | — | SPY (prompt) | MDY | IJR | QQQ |
+|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|
+| 100% | +62% | −67% | −79% | +134% | | +773% | +230% | +4,459% | +148% |
+| 50% | +29% | −40% | −49% | +64% | | +208% | +96% | +671% | +69% |
+| 25% | +14% | −22% | −27% | +31% | | +77% | +43% | +187% | +33% |
+| **10%** | **+6%** | **−9%** | **−11%** | **+12%** | | **+26%** | **+16%** | **+54%** | **+13%** |
+
+At 10% per trade the realistic-entry mid/small-cap sleeves shrink from
+catastrophic to a modest, believable loss (still net-negative — there's truly
+no edge left at that entry point), and the prompt-entry sleeves become
+credible, attractive numbers instead of an all-in artifact.
+
+**Diversification (pooling) and DSR-weighting, revisited in this light:**
+equal-weight pooling the four *all-in* sleeves (25% each) drags the combined
+account down to +12.7% / −35.8% max DD — worse than the S&P 500 alone, because
+25% is still large enough for the MDY/IJR sleeves' ruin to dominate. Weighting
+by each sleeve's own Deflated Sharpe Ratio (`dsr_weights` — reuses
+`significance.py`) does far better precisely *because* it defunds the
+weak/negative-edge sleeves: S&P 500 41%, Nasdaq-100 52%, MDY/IJR 3.5% each
+(floored, not zero) → **combined $190k (+90%), max DD only −11.3%** — both a
+higher return *and* a shallower drawdown than the S&P-500-only baseline. Sleeve
+correlations are low (r = 0.01–0.18 across all pairs, confirming genuine
+diversification potential), but that potential is only realizable once each
+sleeve is sized by its own risk/edge quality — equal-weight diversification
+across sleeves of wildly different quality just averages in the disaster.
+
+**Takeaway:** "combine the risk aspects" is worth doing, but the value isn't in
+diversification for its own sake — it's in (a) recognizing that different index
+families capture the edge at different entry points and need different
+execution to realize it, and (b) using a risk/significance measure (DSR) to
+decide *how much* capital each sleeve deserves, which the earlier all-in,
+one-position analyses had no mechanism to express.
+
+## Does Europe have the same effect? (`europe.py`, `europe_report.py`)
+
+**Wikipedia doesn't work for Europe.** Checked FTSE 100, DAX, CAC 40, IBEX 35,
+FTSE MIB, AEX, SMI, EURO STOXX 50, and OMX Stockholm 30: none have a
+structured, dated constituent-change table like the S&P family's — only
+narrative "History" prose, and no dedicated "List of X constituents" article
+exists for any of them. Same problem that got the Dow excluded from the
+cross-index study, but for a different reason (data availability, not
+committee-selection).
+
+**STOXX itself publishes one, though**: an official "Historical Index
+Compositions" PDF covering DAX, TecDAX, MDAX, and SDAX back to 1987/2003, in
+the same (date of change, date of announcement, deletion, addition) shape as
+the Wikipedia tables — found via web search, not obvious from STOXX's
+JS-rendered site (which blocks headless-browser access). This module parses
+**all four sections** — the complete German large/tech/mid/small-cap ladder,
+paralleling the US S&P 500/400/600 + Nasdaq-100 coverage.
+
+A meaningful fraction of MDAX/SDAX rows couldn't be safely resolved: some
+reconstitution dates jumble many companies at once with the PDF's
+deletion/addition column structure lost in text extraction, and some long
+company names wrap across lines in a way this parser doesn't rejoin — both
+are dropped rather than guessed (this lowers MDAX/SDAX's yield versus the
+cleaner DAX/TecDAX tables). A further ~13 companies across all four indices
+were taken private, merged away, or restructured into insolvency with no
+surviving Yahoo history at any ticker/exchange variant tried (ISRA VISION,
+Varta, SUSE S.A., Steinhoff International, Gerry Weber, Leoni, Synlab,
+Vitesco Technologies, About You Holding, comdirect bank, and a few whose only
+surviving listing is a regional German exchange too shallow to reach their
+addition date) — see `europe.py`'s module docstring for the full accounting.
+
+**Result: the effect's sign and size flips completely across the German
+market-cap ladder, and doesn't line up with the US pattern at all.**
+Announcement→rebalance, market-adjusted vs. each index's own benchmark:
+
+| Index | n | mean | t | win% | DSR |
+|---|---:|---:|---:|---:|---:|
+| **DAX** (large-cap) | 27 | **−3.50%** | **−4.22** | **22%** | 0.00 |
+| TecDAX (tech) | 26 | +1.51% | +1.78 | 65% | 0.05 |
+| **MDAX** (mid-cap) | 27 | **+3.22%** | **+3.00** | **78%** | 0.27 |
+| SDAX (small-cap) | 54 | −0.38% | −0.41 | 52% | 0.00 |
+
+$100k all-in pocket per index (same window each, 2018→2023-26):
+
+| Index | final | max DD |
+|---|---:|---:|
+| DAX | $41k (−59%) | −58% |
+| TecDAX | $118k (+18%) | −24% |
+| **MDAX** | **$161k (+61%)** | **−17%** |
+| SDAX | $59k (−41%) | −51% |
+
+**DAX (large-cap) additions tend to *fall*, hard** — broad-based (21 of 27
+events negative), including ordinary additions (MTU Aero Engines −10.0%,
+Covestro −9.8%, Hannover Re −11.5%) and recent spinoffs/IPOs (Siemens Energy
+−13.0%/−4.2%, Porsche AG −7.6%). **MDAX (mid-cap) is the mirror image** —
+strong, broad-based, 78%-win-rate gains — the best risk/reward of any index
+in this entire study (DSR=0.27, still short of the 0.95 "survives correction"
+bar, but the highest of any single-index result here). **SDAX (small-cap) is
+essentially flat** (t=−0.41 on the *largest* sample in the whole project,
+n=54 — a precise null, not just noise) — a sharp contrast with the **US**,
+where small-caps (S&P 600) showed the *strongest* effect of any US index.
+There is no simple "smaller = bigger pop" (or "bigger = bigger pop") rule that
+holds across both markets; whatever drives index-fund-flow pricing pressure in
+Germany does not scale with market-cap the same way it does in the US.
+
+**Tested and rejected** (for DAX): pre-announcement front-running ("buy the
+rumor, sell the news" — plausible since DAX's reconstitution is free-float-
+market-cap rules-based and thus more *predictable* than the S&P's
+discretionary committee). `CAR[AD-10→AD-1]` = −0.32% (t=−0.31, n.s.) across
+all four indices' pre-drift checks — no significant pre-announcement drift
+anywhere, so none of the sign flips are explained by smart money front-running
+the announcement and trading out of it before the print.
+
+**Unconfirmed hypotheses** (flagged as such, not concluded): DAX's negative
+sample is concentrated in a period when several additions were recent
+spinoffs/IPOs (Siemens Energy, Daimler Truck, Porsche) subject to unrelated
+post-spinoff share overhang, and/or richly-priced 2020–21 growth/COVID
+darlings (HelloFresh, Delivery Hero, Zalando, Sartorius) heading into the 2022
+unwind — either could inject a directional bias unrelated to the inclusion
+mechanism that a sample of 27 can't fully average out. MDAX and SDAX (n=27,
+n=54) are less exposed to that particular bias and still show a totally
+different pattern from each other, which argues the market-cap-tier effect is
+real rather than purely a sampling artifact — but four index-level t-stats is
+still a small number of "trials" for a claim this surprising; treat it as a
+strong, well-tested lead, not a settled cross-market law.
+
+```bash
+PYTHONPATH=<repo parent> python -m quant.index_effect.europe_report
+```
+
 ## Caveats
 
 * Modern sample only (Nasdaq ≈5y); the pre-2021 decay comparison needs the Yahoo
   loader (`prices.load_yahoo`) once its rate limit clears.
+* The prompt-entry (`close[AD]`) all-in compounded figures above are explicitly
+  **illustrative, not achievable**: same-day execution at every one of 100+
+  events, unlimited capital scalability into small-cap names, and zero slippage
+  at exponentially growing position sizes are all unrealistic simultaneously.
+  Read them as "the edge is real and large," not as a return to expect.
+* The hedged-trade comparison ignores short-borrow cost/availability on the ETF
+  leg (small but non-zero for a 1-2 week hold).
+* DSR weights are estimated in-sample on the same data used to evaluate the
+  pooled result — a legitimate next step is walk-forward weighting (compute
+  each quarter's DSR only from *prior* trades) to check the weighting scheme
+  isn't itself curve-fit to this sample.
 * n = 38 announcement-dated events — solid t-stats, but a single-regime, single-
   source sample. Announcement dates are Wikipedia-sourced (internally consistent:
   the AD→AD+1 gap confirms after-close timing).

@@ -10,10 +10,22 @@ import datetime as dt
 
 import numpy as np
 import pandas as pd
+import pytest
 
+from quant.index_effect.europe import INDEX_CONFIG, NAME_TO_TICKER, extract_additions, parse_change_blocks
 from quant.index_effect.events import parse_changes
+from quant.index_effect.multi_index import (
+    dsr_weights,
+    equal_weights,
+    simulate_pooled,
+    sleeve_correlation,
+)
 from quant.index_effect.portfolio import (
+    Trade,
+    build_hedged_trade,
     build_trade,
+    build_trade_prompt,
+    combine_curves,
     longest_underwater,
     max_drawdown,
     simulate,
@@ -213,6 +225,62 @@ def test_build_trade_entry_open_exit_close():
     assert abs(t.ret - (121 / 110 - 1)) < 1e-12
 
 
+def test_build_trade_prompt_enters_at_announcement_day_close():
+    # same fixture as test_build_trade_entry_open_exit_close: announce day-2,
+    # effective day-7. The prompt entry buys CLOSE on day-2 itself, not the
+    # OPEN on day-3 -- capturing the overnight gap between them.
+    rows = [(100, 100)] * 10
+    rows[2] = (105, 108)  # announcement day's close: what the prompt entry buys
+    rows[3] = (110, 112)  # AD+1 open/close: what the no-foreknowledge entry buys
+    rows[6] = (120, 121)
+    df = _ohlc(rows)
+    ann, eff = df.index[2].date(), df.index[7].date()
+    t = build_trade_prompt(df, ann, eff, "T")
+    assert t.entry_px == 108  # CLOSE on the announcement day
+    assert t.exit_px == 121
+    assert abs(t.ret - (121 / 108 - 1)) < 1e-12
+    # strictly more return captured than the no-foreknowledge open[AD+1] entry
+    open_next = build_trade(df, ann, eff, "T")
+    assert t.ret > open_next.ret
+
+
+def test_build_hedged_trade_cancels_matched_beta():
+    # stock +10% and benchmark +10% over the same hold -> zero hedged return
+    stock = [(100, 100)] * 10
+    stock[3] = (110, 112)
+    stock[6] = (120, 121)  # stock: 110 -> 121, +10%
+    bench = [(100, 100)] * 10
+    bench[6] = (100, 110)  # bench close[3]=100 (anchor) -> close[6]=110, +10%
+    sdf, bdf = _ohlc(stock), _ohlc(bench)
+    ann, eff = sdf.index[2].date(), sdf.index[7].date()
+    t = build_hedged_trade(sdf, bdf, ann, eff, "T")
+    assert t is not None
+    assert abs(t.ret - 0.0) < 1e-9
+
+
+def test_build_hedged_trade_isolates_alpha_from_beta():
+    # stock +10%, benchmark flat -> hedged return = the full +10% (no beta to strip)
+    stock = [(100, 100)] * 10
+    stock[3] = (110, 112)
+    stock[6] = (120, 121)
+    bench = [(100, 100)] * 10  # perfectly flat
+    sdf, bdf = _ohlc(stock), _ohlc(bench)
+    ann, eff = sdf.index[2].date(), sdf.index[7].date()
+    t = build_hedged_trade(sdf, bdf, ann, eff, "T")
+    assert abs(t.ret - (121 / 110 - 1)) < 1e-9
+
+
+def test_build_hedged_trade_short_leg_profits_when_benchmark_falls():
+    # stock flat, benchmark falls 10% -> hedged return is positive (short gains)
+    stock = [(100, 100)] * 10  # flat: open[3]=100, close[6]=100
+    bench = [(100, 100)] * 10
+    bench[6] = (100, 90)  # bench close[3]=100 (anchor) -> close[6]=90, -10%
+    sdf, bdf = _ohlc(stock), _ohlc(bench)
+    ann, eff = sdf.index[2].date(), sdf.index[7].date()
+    t = build_hedged_trade(sdf, bdf, ann, eff, "T")
+    assert abs(t.ret - 0.10) < 1e-9
+
+
 def test_simulate_compounds_and_respects_no_leverage():
     df = _ohlc([(100, 100)] * 12)
     # two sequential winners of +10% each (open 100 -> close 110)
@@ -281,3 +349,164 @@ def test_assess_ranks_clean_edge_above_noise():
     assert out["strong"]["psr"] > out["weak"]["psr"]
     assert out["strong"]["dsr"] > out["weak"]["dsr"]
     assert 0.0 <= out["strong"]["dsr"] <= 1.0
+
+
+def test_combine_curves_sums_aligned_equity():
+    a = [("d1", 100.0), ("d2", 110.0), ("d3", 90.0)]
+    b = [("d1", 50.0), ("d2", 50.0), ("d3", 60.0)]
+    combined = combine_curves([a, b])
+    assert combined == [("d1", 150.0), ("d2", 160.0), ("d3", 150.0)]
+
+
+def test_combine_curves_rejects_misaligned_lengths():
+    a = [("d1", 100.0), ("d2", 110.0)]
+    b = [("d1", 50.0)]
+    with pytest.raises(ValueError):
+        combine_curves([a, b])
+
+
+def test_combine_curves_empty():
+    assert combine_curves([]) == []
+
+
+def _mk_trade(entry, exit_, entry_px, exit_px):
+    return Trade("X", entry, exit_, entry_px, exit_px, {entry: entry_px, exit_: exit_px})
+
+
+def test_equal_weights_sum_to_one():
+    w = equal_weights(["A", "B", "C", "D"])
+    assert abs(sum(w.values()) - 1.0) < 1e-9
+    assert all(abs(v - 0.25) < 1e-9 for v in w.values())
+
+
+def test_dsr_weights_favor_the_cleaner_edge_and_sum_to_one():
+    # index A: consistent small winner; index B: noisy coin-flip -> A should
+    # get more capital, and a near-zero-edge sleeve still gets the floor, not 0.
+    strong = [_mk_trade(f"d{i}", f"d{i}x", 100, 100 * (1 + r))
+              for i, r in enumerate([0.02, 0.03, 0.025, 0.02, 0.03, 0.025, 0.02, 0.03])]
+    weak = [_mk_trade(f"e{i}", f"e{i}x", 100, 100 * (1 + r))
+            for i, r in enumerate([0.05, -0.06, 0.07, -0.04, 0.06, -0.05, 0.04, -0.03])]
+    w = dsr_weights({"strong": strong, "weak": weak})
+    assert abs(sum(w.values()) - 1.0) < 1e-9
+    assert w["strong"] > w["weak"]
+    assert w["weak"] > 0  # floor keeps a token allocation, never zero
+
+
+def test_dsr_weights_handles_empty_sleeve():
+    strong = [_mk_trade(f"d{i}", f"d{i}x", 100, 102) for i in range(5)]
+    w = dsr_weights({"strong": strong, "empty": []})
+    assert abs(sum(w.values()) - 1.0) < 1e-9
+    assert w["empty"] > 0  # floor, not a crash
+
+
+def test_simulate_pooled_matches_manual_sleeve_sum():
+    t1 = _mk_trade("d0", "d1", 100, 110)  # sleeve A: +10%
+    t2 = _mk_trade("d0", "d1", 100, 90)  # sleeve B: -10%
+    cal = ["d0", "d1"]
+    weights = {"A": 0.5, "B": 0.5}
+    out = simulate_pooled({"A": [t1], "B": [t2]}, cal, weights, start_cash=100.0)
+    # 50 into a +10% winner and 50 into a -10% loser -> net back to par
+    assert abs(out["combined"][-1][1] - 100.0) < 1e-9
+    assert abs(out["sleeves"]["A"][-1][1] - 55.0) < 1e-9
+    assert abs(out["sleeves"]["B"][-1][1] - 45.0) < 1e-9
+
+
+def test_sleeve_correlation_perfectly_correlated_sleeves():
+    # varying daily returns, but b always moves at 2x a's return -> corr = 1
+    a = [("d0", 100.0), ("d1", 110.0), ("d2", 99.0), ("d3", 108.9)]
+    b = [("d0", 100.0), ("d1", 120.0), ("d2", 96.0), ("d3", 115.2)]
+    corr = sleeve_correlation({"a": a, "b": b})
+    assert abs(corr["a / b"] - 1.0) < 1e-9
+
+
+def test_sleeve_correlation_uncorrelated_sleeves():
+    a = [("d0", 100.0), ("d1", 110.0), ("d2", 99.0), ("d3", 108.9)]
+    b = [("d0", 100.0), ("d1", 99.0), ("d2", 108.9), ("d3", 98.0)]
+    corr = sleeve_correlation({"a": a, "b": b})
+    assert -1.0 <= corr["a / b"] <= 1.0
+
+
+# ---- europe.py: STOXX historical-compositions PDF-text parser ----
+
+STOXX_TEXT_SIMPLE = """
+ HISTORICAL INDEX COMPOSITIONS OF EQUITY AND STRATEGY INDICES
+
+
+4/60
+Date of
+change
+Date of
+announcement Deletion Addition
+23.07.2001 26.06.2001 Dresdner Bank MLP
+24.09.2018 05.09.2018 Commerzbank AG Wirecard AG
+"""
+
+STOXX_TEXT_MULTI_ADD = """
+20.09.2021 03.09.2021 -
+Airbus SE
+Brenntag SE
+HelloFresh SE
+"""
+
+STOXX_TEXT_AMBIGUOUS = """
+24.06.2024 18.06.2024 MorphoSys Elmos Semiconductor
+23.12.2024 04.12.2024 Energiekontor
+SMA Solar Technology
+"""
+
+
+def test_parse_change_blocks_basic():
+    blocks = parse_change_blocks(STOXX_TEXT_SIMPLE, min_year=2015)
+    # the 2001 row is filtered out by min_year; only 2018 survives
+    assert len(blocks) == 1
+    eff, ann, pairs = blocks[0]
+    assert eff == dt.date(2018, 9, 24)
+    assert ann == dt.date(2018, 9, 5)
+    assert pairs == ["Commerzbank AG Wirecard AG"]
+
+
+def test_parse_change_blocks_multiline_pure_addition():
+    blocks = parse_change_blocks(STOXX_TEXT_MULTI_ADD, min_year=2015)
+    assert len(blocks) == 1
+    eff, ann, pairs = blocks[0]
+    assert eff == dt.date(2021, 9, 20)
+    assert pairs == ["-", "Airbus SE", "Brenntag SE", "HelloFresh SE"]
+
+
+def test_extract_additions_resolves_simple_swap():
+    names = {"Commerzbank AG": "CBK.DE", "Wirecard AG": "WDI.HM"}
+    additions, dropped = extract_additions(STOXX_TEXT_SIMPLE, min_year=2015, name_to_ticker=names)
+    assert additions == [(dt.date(2018, 9, 24), dt.date(2018, 9, 5), "WDI.HM")]
+    assert dropped == []
+
+
+def test_extract_additions_resolves_pure_addition_block():
+    names = {"Airbus SE": "AIR.DE", "Brenntag SE": "BNR.DE", "HelloFresh SE": "HFG.DE"}
+    additions, dropped = extract_additions(STOXX_TEXT_MULTI_ADD, min_year=2015, name_to_ticker=names)
+    tickers = {t for _, _, t in additions}
+    assert tickers == {"AIR.DE", "BNR.DE", "HFG.DE"}
+    assert all(eff == dt.date(2021, 9, 20) for eff, _, _ in additions)
+    assert dropped == []
+
+
+def test_index_config_covers_the_full_german_market_cap_ladder():
+    assert set(INDEX_CONFIG) == {"DAX", "TecDAX", "MDAX", "SDAX"}
+    for marker, bench in INDEX_CONFIG.values():
+        assert "INDEX COMPOSITION" in marker
+        assert bench.startswith("^")
+
+
+def test_name_to_ticker_has_no_blank_entries():
+    for name, ticker in NAME_TO_TICKER.items():
+        assert name.strip() and ticker.strip()
+        assert "." in ticker  # every entry is an exchange-suffixed ticker
+
+
+def test_extract_additions_drops_ambiguous_blocks_instead_of_guessing():
+    # only Elmos Semiconductor is a known name in the dict; MorphoSys, Energiekontor
+    # and SMA Solar Technology are deliberately left out to exercise the drop path.
+    names = {"Elmos Semiconductor": "ELG.DE"}
+    additions, dropped = extract_additions(STOXX_TEXT_AMBIGUOUS, min_year=2015, name_to_ticker=names)
+    assert additions == []  # 1-known-name lines can't be resolved to a addition/deletion pair
+    assert len(dropped) == 3
+    assert all(reason for *_, reason in dropped)

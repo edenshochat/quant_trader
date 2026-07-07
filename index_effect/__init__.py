@@ -13,6 +13,7 @@ from .events import INDEX_PAGES, AdditionEvent, load_events, parse_changes
 from .portfolio import (
     Trade,
     build_trade,
+    combine_curves,
     longest_underwater,
     max_drawdown,
     simulate,
@@ -47,6 +48,7 @@ __all__ = [
     "Trade",
     "build_trade",
     "simulate",
+    "combine_curves",
     "max_drawdown",
     "longest_underwater",
     "worst_losing_streak",

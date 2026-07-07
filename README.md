@@ -135,13 +135,47 @@ significant in all four families — S&P 500 **+6.1% (t=5.8)**, S&P 600 +3.5%
 (t=4.2), S&P 400 +3.1% (t=2.7), Nasdaq-100 +2.6% (t=2.9) — and is *largest in the
 S&P 500*, i.e. it scales with indexed AUM, not with how small-cap the add is.
 
+**Pooling across indices (`multi_index.py`):** trading each mid/small-cap sleeve
+all-in blows up (S&P 400 −67%, S&P 600 −79% max DD −75%/−82%) *despite* their
+edge being real and highly significant — hedging out market beta doesn't fix it,
+because the problem is that the "safe" next-morning entry misses almost the
+entire edge for those indices (it lives in the overnight announcement gap).
+**Fractional position sizing** (not diversification alone) is what actually
+tames both the small-cap blow-ups and the unrealistic all-in-compounding
+numbers; weighting sleeves by their own Deflated Sharpe Ratio beats naive
+equal-weight pooling — $190k (+90%) at only −11.3% max DD, beating the S&P-500-
+only baseline on both return and drawdown.
+
+**Europe (`europe.py`):** no major European index has a Wikipedia-parseable
+change log — but STOXX itself publishes an official "Historical Index
+Compositions" PDF covering the full German ladder: DAX, TecDAX, MDAX, SDAX.
+The effect's sign and size **flips completely across market-cap tiers, and
+doesn't match the US pattern**: DAX (large-cap) additions *fall* significantly
+into the rebalance (mean −3.50%, t=−4.22, 22% win — a $100k all-in DAX pocket
+*loses* 59%); **MDAX (mid-cap) is the mirror image** — strong, broad-based
+gains (+3.22%, t=3.00, 78% win, pocket +61%); SDAX (small-cap) is essentially
+flat (t=−0.41 on n=54, the largest sample in the project) — the opposite of
+the US, where small-caps (S&P 600) showed the *strongest* effect. Pre-
+announcement front-running was tested as an explanation for the DAX reversal
+and rejected (no significant pre-drift anywhere) — see `FINDINGS.md` for the
+full results and honest, unconfirmed hypotheses about why.
+
 Full write-up and caveats: [`index_effect/FINDINGS.md`](index_effect/FINDINGS.md).
 
 ```bash
-# reproduce (needs network the first time; then cached)
+# reproduce — price/wiki caches are committed, so this runs offline by default
 PYTHONPATH=<repo parent> python -m quant.index_effect.report
-pytest tests/test_index_effect.py -v   # engine is unit-tested offline
+PYTHONPATH=<repo parent> python -m quant.index_effect.cross_index
+PYTHONPATH=<repo parent> python -m quant.index_effect.multi_index
+pytest tests/test_index_effect.py -v   # engine is unit-tested offline (no cache needed)
 ```
+
+Cached Wikipedia change tables (`index_effect/_wiki*.json`) and daily price data
+(`index_effect/_pricecache/`) are committed so the whole study reproduces without
+hitting Yahoo/Nasdaq/Wikipedia again — those sources rate-limit or cap history
+depth, which made re-fetching a recurring friction point during development.
+Delete either and the loaders (`events.fetch_wikitext`, `prices.load_nasdaq`/
+`load_yahoo`) transparently re-fetch and re-cache.
 
 ## Notes
 
